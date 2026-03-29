@@ -6,3 +6,8 @@ src/*.hex
 src/*.lst
 src/*.map
 src/build.sh
+bootloader/*.elf
+bootloader/*.hex
+bootloader/*.lst
+bootloader/*.map
+bootloader/build.sh
