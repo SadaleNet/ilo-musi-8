@@ -11,3 +11,4 @@ bootloader/*.hex
 bootloader/*.lst
 bootloader/*.map
 bootloader/build.sh
+enclosure/*.FCStd1
