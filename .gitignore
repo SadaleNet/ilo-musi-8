@@ -1,11 +1,11 @@
 kicad/ilomusiali-backups/**
 kicad/fp-info-cache
 kicad/production
-src/*.elf
-src/*.hex
-src/*.lst
-src/*.map
-src/build.sh
+firmware/*.elf
+firmware/*.hex
+firmware/*.lst
+firmware/*.map
+firmware/build.sh
 bootloader/*.elf
 bootloader/*.hex
 bootloader/*.lst
