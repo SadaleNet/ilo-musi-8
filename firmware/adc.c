@@ -101,7 +101,7 @@ void adc_button_scan_next_row(void) {
 
 	// Derive card insertion state and vref
 	if(row_scan_config[row_scan_index].pin_channel == 6) {
-		adc_card_inserted = adc_dma_buffer[17];
+		adc_card_inserted = (adc_dma_buffer[17] >= ADC_BUTTON_PRESSED_THRESHOLD);
 		uint32_t adc_vref_reading = (adc_dma_buffer[18]+adc_dma_buffer[19])/2;
 		adc_vref_reading_smoothed = (adc_vref_reading_smoothed*7 + adc_vref_reading*1 + 4)/8; // +4 for rounding off the /8
 	}
@@ -124,8 +124,8 @@ void adc_button_scan_next_row(void) {
 	}
 
 	// Configure DMA for the next read
-	DMA1_Channel1->CNTR = ROW_SCAN_SEQUENCE_CHANNEL_COUNT; // number of items to read
 	DMA1_Channel1->MADDR = (uint32_t)&adc_dma_buffer[ROW_SCAN_SEQUENCE_CHANNEL_COUNT*row_scan_index]; // memory destination
+	DMA1_Channel1->CNTR = ROW_SCAN_SEQUENCE_CHANNEL_COUNT; // number of items to read
 
 	// Configure GPIO for button scanning. The scanning row pin is set to output (which's set to HIGH inside adc_init()). Other pins are set to analog input.
 	GPIOD->CFGLR &= ~0x0FFFFF00; // Set PD2..6 to analog input
@@ -144,6 +144,10 @@ void INTERRUPT_DECORATOR DMA1_Channel1_IRQHandler(void) {
 }
 
 void adc_init(void) {
+	// Reset ADC
+	RCC->PB2PRSTR |= RCC_ADC1RST;
+	RCC->PB2PRSTR &= ~RCC_ADC1RST;
+
 	// ADC clock is HB clock divided by 16. i.e. 48Mhz / 16 = 3Mhz
 	// I intentionally picked a slow rate.
 	// That's because a fast rate would cause the card detection P-MOSFET to interfere with
