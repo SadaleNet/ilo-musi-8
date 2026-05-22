@@ -24,51 +24,34 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include "adc.h"
-#include "lcd.h"
-#include "watchdog.h"
+#include <stdbool.h>
+#include <stdint.h>
 
-#include "ch32fun.h"
-#include <stdio.h>
+#define DISPLAY_WIDTH (128U)
+#define DISPLAY_HEIGHT (64U)
 
-static uint8_t display_buffer[DISPLAY_WIDTH*DISPLAY_HEIGHT/8];
+// The SPI mode would be set to SPI_MODE_MEMORY_CARD or SPI_MODE_MEMORY_CARD_SLOW by the FATFS module,
+// and would be set back to SPI_MODE_LCD after completion of the FATFS operation.
+// The userspace code can always assume the mode is SPI_MODE_LCD.
+enum spi_mode {
+	SPI_MODE_LCD,
+	SPI_MODE_MEMORY_CARD,
+	SPI_MODE_MEMORY_CARD_SLOW, // For card initialization.
+};
 
-int main() {
-	// Kickoff the watchdog as early as possible
-	watchdog_init();
+// Also include code to initialize SPI interface, which's shared by the external memory card.
+void lcd_and_spi_init(void);
+// Default is SPI_MODE_LCD. But during initialization it's briefly switch to SPI_MODE_MEMORY_CARD_SLOW
+void lcd_spi_set_mode(enum spi_mode mode);
 
-	SystemInit();
+// Send out the full 128x64 buffer, column major
+// The transfer is done with DMA and it isn't blocking.
+void lcd_transfer_begin(void *buffer);
+bool lcd_is_transfer_in_progress(void);
 
-	// Enables interrupt preempt feature
-	__set_INTSYSCR( __get_INTSYSCR() | 0x02 );
+// Recommended to call once in a while so that any soft glitch would be fixed.
+// In case an LCD transfer is in progress, it'll block until completion of the transfer.
+void lcd_refresh(void);
 
-	adc_init();
-	lcd_and_spi_init();
-
-	watchdog_feed();
-
-	uint32_t last_lcd_refresh_tick = SysTick->CNT;
-	uint32_t last_button_print_tick = SysTick->CNT;
-	while(1) {
-		uint32_t systick_now = SysTick->CNT;
-		if(systick_now - last_lcd_refresh_tick >= FUNCONF_SYSTEM_CORE_CLOCK/1) { // 1fps
-			while(lcd_is_transfer_in_progress()){}
-			for(size_t i=0; i<sizeof(display_buffer)/sizeof(*display_buffer); i++) {
-				display_buffer[i] = (systick_now*23)^(i);
-			}
-			lcd_transfer_begin(display_buffer);
-			last_lcd_refresh_tick = systick_now;
-		}
-
-		if(systick_now - last_button_print_tick >= FUNCONF_SYSTEM_CORE_CLOCK/100) { // 1fps
-			if(adc_is_reading_ready()){
-				printf( "%08lx | %08lx | %08lx | %01u | %04lu\n\r", adc_button_get_state(), adc_button_get_just_pressed(), adc_button_get_just_released(),
-					adc_card_is_inserted(), adc_get_supply_voltage());
-			} else {
-				printf("...\n\r");
-			}
-			last_button_print_tick = systick_now;
-		}
-		watchdog_feed();
-	}
-}
+void lcd_set_backlight(uint8_t value);
+void lcd_set_contrast(uint8_t value);
