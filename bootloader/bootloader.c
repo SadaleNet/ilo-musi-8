@@ -121,13 +121,13 @@ uint8_t flash_write_sector(uint32_t offset, void *data) {
 }
 
 uint8_t spi_send_byte(uint8_t data) {
-	while((SPI1->STATR & SPI_STATR_BSY)){}
-	SPI1->DATAR = data;
-	// Warning: Must not combine the following two while statements into one
-	// I've empirically found that it'd break the LCD's screen content (content shifted left by 4 pixels)
 	while(!(SPI1->STATR & SPI_STATR_TXE)){}
-	asm volatile("nop"); // Not sure if needed but putting it here anyway
-	while(!(SPI1->STATR & SPI_STATR_RXNE)){} // Wait for RX avaialble
+	SPI1->DATAR = data;
+	// Wait until completion of transfer.
+	// That's because we might want to change the slave select line
+	// or other control lines right after calling this function.
+	// Also wait for availability of the RX's content
+	while((SPI1->STATR & (SPI_STATR_RXNE|SPI_STATR_BSY)) != SPI_STATR_RXNE){}
 	return SPI1->DATAR;
 }
 
