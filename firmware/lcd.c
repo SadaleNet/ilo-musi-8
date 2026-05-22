@@ -132,15 +132,26 @@ void lcd_and_spi_init(void) {
 	// Deselect LCD CS and card CS
 	lcd_use_deselect_mode();
 
-	// GPIO C0 to output PUSH-PULL, C5..C6 to output ALT PUSH-PULL, C7 to INPUT FLOATING (must use floating because we have external pull-up to take care of MMC requirement)
-	GPIOC->CFGLR = (GPIO_CFGLR_OUT_PP << (4*0)) | (GPIO_CFGLR_OUT_PP << (4*1)) | (GPIO_CFGLR_OUT_PP << (4*2)) | (GPIO_CFGLR_OUT_PP << (4*3)) | (GPIO_CFGLR_OUT_PP << (4*4)) // GPIO
+	// GPIO C0, C1, C2, C4 to output PUSH-PULL
+	// C3, C5, C6 to output ALT PUSH-PULL,
+	// C7 to INPUT FLOATING (must use floating because we have external pull-up to take care of memory card's requirement)
+	GPIOC->CFGLR = (GPIO_CFGLR_OUT_PP << (4*0)) | (GPIO_CFGLR_OUT_PP << (4*1)) | (GPIO_CFGLR_OUT_PP << (4*2)) | (GPIO_CFGLR_OUT_AF_PP << (4*3)) | (GPIO_CFGLR_OUT_PP << (4*4)) // GPIO
 					| (GPIO_CFGLR_OUT_AF_PP << (4*5)) | (GPIO_CFGLR_OUT_AF_PP << (4*6)) | (GPIO_CFGLR_IN_FLOAT << (4*7)); // SPI
 
-	// Reset SPI
-	RCC->PB2PRSTR |= RCC_SPI1RST;
-	RCC->PB2PRSTR &= ~RCC_SPI1RST;
-	// Enable the SPI clock source
-	RCC->PB2PCENR |= RCC_SPI1EN;
+	// Reset SPI and TIM1
+	RCC->PB2PRSTR |= RCC_SPI1RST | RCC_TIM1RST;
+	RCC->PB2PRSTR &= ~(RCC_SPI1RST | RCC_TIM1RST);
+	// Enable the SPI and TIM1 clock source
+	RCC->PB2PCENR |= RCC_SPI1EN | RCC_TIM1EN;
+
+	TIM1->PSC = 0x0000; // prescaler: 1
+	TIM1->ATRLR = 255; // Autoreload value
+	TIM1->CCER |= TIM1_CCER_CC3E; // Enable TIM1_CH3 output, negative polarity because TIM1_CCER_CC3P not specified
+	TIM1->CH3CVR = 0;
+	TIM1->SWEVGR |= TIM1_SWEVGR_UG; // Update the autoreload register AND the CH3CVR register
+	TIM1->CHCTLR2 |= TIM1_CHCTLR2_OC3PE | TIM1_CHCTLR2_OC3M_2 | TIM1_CHCTLR2_OC3M_1; // Set TIM1_CH3 to PWM mode 1
+	TIM1->BDTR |= TIM1_BDTR_MOE; // Enable TIM1's output
+	TIM1->CTLR1 |= TIM1_CTLR1_ARPE | TIM1_CTLR1_CEN; // Enable the timer itself
 
 	// Configure SPI. SPI_Mode_Master and SPI_CTLR1_SPE must be set after CS pin is high
 	SPI1->CTLR1 =	SPI_CTLR1_BR_2 | SPI_CTLR1_BR_1 | SPI_CTLR1_BR_0 // Same as lcd_spi_set_mode(SPI_MODE_MEMORY_CARD_SLOW)
@@ -270,6 +281,12 @@ void lcd_refresh(void) {
 
 	// Also set contrast because the contrast setting would be erased after refresh
 	lcd_set_contrast(lcd_contrast);
+}
+
+void lcd_set_brightness(uint8_t value) {
+	TIM1->CH3CVR = value;
+	// Update the CH3CVR register. It works without it but the specs said that it's required
+	TIM1->SWEVGR |= TIM1_SWEVGR_UG;
 }
 
 void lcd_set_contrast(uint8_t value) {
