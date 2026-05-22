@@ -4,7 +4,7 @@ TARGET:=ilomusi8
 CH32FUN:=$(CH32FUN_PATH)/ch32fun
 TARGET_MCU:=CH32V006
 
-ADDITIONAL_C_FILES+=adc.c lcd.c watchdog.c
+ADDITIONAL_C_FILES+=chip8.c adc.c lcd.c watchdog.c
 
 include $(CH32FUN)/ch32fun.mk
 
