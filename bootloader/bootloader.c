@@ -175,11 +175,11 @@ void lcd_init() {
 __attribute__((noreturn)) int main() {
 	SystemInit();
 
-	// Reset GPIOC, GPIOD, ADC and SPI
+	// Reset GPIOC and SPI
 	RCC->PB2PRSTR |= RCC_IOPCRST|RCC_SPI1RST;
 	RCC->PB2PRSTR &= ~(RCC_IOPCRST|RCC_SPI1RST);
 
-	// Enable the GPIOs
+	// Enable the GPIO and SPI
 	RCC->PB2PCENR |= RCC_IOPCEN | RCC_SPI1EN;
 
 	// Deselect the card and the LCD by setting the pins HIGH. Also turn off the backlight by setting it LOW
