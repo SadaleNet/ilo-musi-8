@@ -30,6 +30,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+
 #define PIN_CARD_CS (0)
 #define PIN_LCD_CS (1)
 #define PIN_LCD_DC (2)
@@ -45,20 +46,35 @@ const uint8_t LCD_REFRESH_SEQUENCE[] = {
 	0xA1, // SEG Direction reverse
 	0xC0, // COM Direction normal
 
-	// TODO: make the constrast configurable
 	0x24, // Regulation Ratio = 5 (max is 7)
-	0x81, 0x20, // Set EV to 0x20 (max is 0x3F)
+	//0x81, 0x20, // EV is set in lcd_set_contrast()
 
 	0x2C, // Power Control: Booster on
 	0x2E, // Power Control: Regulator on
 	0x2F, // Power Control: Follower on
 };
 
-#define LCD_CMD_DISPLAY_ON (0xAF)
+#define LCD_DEFAULT_CONTRAST (0x20)
+static uint8_t lcd_contrast; // Range: 0x00..0x3F
 
 static uint8_t* lcd_dma_buffer; // CONCURRENCY_VARIABLE: Written in lcd_transfer_begin(), read/written by lcd_transfer_next_row()
 static size_t lcd_dma_row_index; // CONCURRENCY_VARIABLE: ditto
 static volatile bool lcd_dma_transfer_in_progress; // CONCURRENCY_VARIABLE: Written in lcd_transfer_begin() and DMA1_Channel3_IRQHandler(), read by lcd_is_transfer_in_progress()
+
+static void lcd_use_command_mode(void) {
+	// LCD CS LOW, DC LOW (select LCD, send command)
+	GPIOC->BSHR = ((1<<PIN_LCD_CS)<<16) | ((1<<PIN_LCD_DC)<<16);
+}
+
+static void lcd_use_data_mode(void) {
+	// LCD CS LOW, DC HIGH (select LCD, send data)
+	GPIOC->BSHR = ((1<<PIN_LCD_CS)<<16) | ((1<<PIN_LCD_DC)<<0);
+}
+
+static void lcd_use_deselect_mode(void) {
+	// LCD CS HIGH, CAFD CS HIGH
+	GPIOC->BSHR = ((1<<PIN_LCD_CS)<<0) | ((1<<PIN_CARD_CS)<<0);
+}
 
 static void lcd_spi_send_byte(uint8_t data) {
 	while(!(SPI1->STATR & SPI_STATR_TXE)){}
@@ -71,16 +87,14 @@ static void lcd_spi_send_byte(uint8_t data) {
 
 static void lcd_transfer_next_row(void) {
 	static uint8_t lcd_dma_buffer_row[DISPLAY_WIDTH];
-	// LCD CS LOW, DC LOW (select LCD, send command)
-	GPIOC->BSHR = (((1<<PIN_LCD_CS)|(1<<PIN_LCD_DC))<<16);
+
 	// Set page
+	lcd_use_command_mode();
 	lcd_spi_send_byte(0xb0 | lcd_dma_row_index);
 	lcd_spi_send_byte(0x10 | 0);
 	lcd_spi_send_byte(0x00 | 4);
 
-	// DC high (send data)
-	GPIOC->BSHR = ((1<<PIN_LCD_DC)<<0);
-
+	lcd_use_data_mode();
 	// Fill in the lcd_dma_buffer_row to be sent via DMA
 	for (int i=0; i<DISPLAY_WIDTH; i++) {
 		lcd_dma_buffer_row[i] = lcd_dma_buffer[i*DISPLAY_HEIGHT/8+lcd_dma_row_index];
@@ -101,14 +115,12 @@ void INTERRUPT_DECORATOR DMA1_Channel3_IRQHandler(void) {
 	if(++lcd_dma_row_index < DISPLAY_HEIGHT/8) {
 		lcd_transfer_next_row();
 	} else {
-		// LCD CS LOW, DC LOW (select LCD, send command)
-		GPIOC->BSHR = (((1<<PIN_LCD_CS)|(1<<PIN_LCD_DC))<<16);
-
 		// Turn on display after completing the DMA transfer
-		lcd_spi_send_byte(LCD_CMD_DISPLAY_ON);
-		// All done. Deselect LCD CS pin
-		GPIOC->BSHR = ((1<<PIN_LCD_CS)<<0);
+		lcd_use_command_mode();
+		lcd_spi_send_byte(0xAF);
 
+		// All done. Deselecting LCD CS
+		lcd_use_deselect_mode();
 		lcd_dma_transfer_in_progress = false;
 	}
 }
@@ -117,8 +129,8 @@ void lcd_and_spi_init(void) {
 	// Enable the GPIO
 	RCC->PB2PCENR |= RCC_IOPCEN;
 
-	// Deselect the card and the LCD by setting the pins HIGH. Also turn off the backlight by setting it LOW
-	GPIOC->BSHR = ((1<<PIN_CARD_CS)<<0) | ((1<<PIN_LCD_CS)<<0) | ((1<<PIN_LCD_BL)<<16);
+	// Deselect LCD CS and card CS
+	lcd_use_deselect_mode();
 
 	// GPIO C0 to output PUSH-PULL, C5..C6 to output ALT PUSH-PULL, C7 to INPUT FLOATING (must use floating because we have external pull-up to take care of MMC requirement)
 	GPIOC->CFGLR = (GPIO_CFGLR_OUT_PP << (4*0)) | (GPIO_CFGLR_OUT_PP << (4*1)) | (GPIO_CFGLR_OUT_PP << (4*2)) | (GPIO_CFGLR_OUT_PP << (4*3)) | (GPIO_CFGLR_OUT_PP << (4*4)) // GPIO
@@ -167,6 +179,7 @@ void lcd_and_spi_init(void) {
 	PFIC->IENR[DMA1_Channel3_IRQn/32] |= (1<<(DMA1_Channel3_IRQn%32));
 
 	lcd_dma_transfer_in_progress = false;
+	lcd_contrast = LCD_DEFAULT_CONTRAST;
 	// Must do card initialization before doing LCD initialization to put the card into SPI mode
 	// TODO: uncomment this piece of code after memory card driver's implemented
 	// maybe also check if the card has been inserted first
@@ -179,8 +192,8 @@ void lcd_and_spi_init(void) {
 	lcd_spi_set_mode(SPI_MODE_LCD);
 
 	Delay_Ms(20); // Wait for power to stabalize (LCD specs recommends >1ms)
-	// Set LCD CS DC to LOW, also toggle LCD RES pin (first set it to LOW, then set it to HIGH)
-	GPIOC->BSHR = (((1<<PIN_LCD_RES)|(1<<PIN_LCD_CS)|(1<<PIN_LCD_DC))<<16);
+	// Toggle LCD RES pin (first set it to LOW, then set it to HIGH)
+	GPIOC->BSHR = ((1<<PIN_LCD_RES)<<16);
 	Delay_Us(100); // LCD's requirement: >5us
 	GPIOC->BSHR = ((1<<PIN_LCD_RES)<<0);
 	Delay_Us(100); // LCD's requirement: >5us
@@ -208,7 +221,7 @@ void lcd_spi_set_mode(enum spi_mode mode) {
 	switch(mode) {
 		case SPI_MODE_LCD:
 			// Deselect card CS pin
-			GPIOC->BSHR = ((1<<PIN_CARD_CS)<<0);
+			lcd_use_deselect_mode();
 			// Send out a byte to complete the deselection process
 			lcd_spi_send_byte(0xFF);
 
@@ -225,9 +238,6 @@ void lcd_spi_set_mode(enum spi_mode mode) {
 		case SPI_MODE_MEMORY_CARD_SLOW:
 			// Wait until completion of LCD DMA transfer
 			while(lcd_is_transfer_in_progress()){}
-
-			// Deselect LCD
-			GPIOC->BSHR = ((1<<PIN_LCD_CS)<<0);
 
 			// Switch to SPI mode 0 for memory card
 			SPI1->CTLR1 &= ~(SPI_CPOL_High | SPI_CPHA_2Edge);
@@ -250,8 +260,24 @@ void lcd_refresh(void) {
 	// Wait until completion of LCD DMA transfer
 	while(lcd_is_transfer_in_progress()){}
 
+	lcd_use_command_mode();
 	// Send out the initialization sequence
 	for (size_t i=0; i<sizeof(LCD_REFRESH_SEQUENCE)/sizeof(*LCD_REFRESH_SEQUENCE); i++) {
 		lcd_spi_send_byte(LCD_REFRESH_SEQUENCE[i]);
 	}
+	// All done. Deselect LCD CS pin
+	lcd_use_deselect_mode();
+
+	// Also set contrast because the contrast setting would be erased after refresh
+	lcd_set_contrast(lcd_contrast);
+}
+
+void lcd_set_contrast(uint8_t value) {
+	// Wait until completion of LCD DMA transfer
+	while(lcd_is_transfer_in_progress()){}
+
+	lcd_use_command_mode();
+	lcd_spi_send_byte(0x81);
+	lcd_spi_send_byte(value);
+	lcd_use_deselect_mode();
 }

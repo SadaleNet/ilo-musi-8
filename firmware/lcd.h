@@ -50,8 +50,9 @@ void lcd_transfer_begin(void *buffer);
 bool lcd_is_transfer_in_progress(void);
 
 // Recommended to call once in a while so that any soft glitch would be fixed.
+// Please notice that calling this function would cause the LCD to blink briefly.
 // In case an LCD transfer is in progress, it'll block until completion of the transfer.
 void lcd_refresh(void);
 
 void lcd_set_backlight(uint8_t value);
-void lcd_set_contrast(uint8_t value);
+void lcd_set_contrast(uint8_t value); // Range: 0x00..0x3F
