@@ -174,7 +174,7 @@ void adc_init(void) {
 	DMA1_Channel1->PADDR = (uint32_t)(&ADC1->RDATAR); // Peripheral address register
 
 	DMA1_Channel1->CFGR =
-		(DMA_CFGR1_PL_0 | DMA_CFGR1_PL_1) | // Set the priority to "Very High"
+		DMA_CFGR1_PL_1 | // Set the priority to "High"
 		DMA_CFGR1_PSIZE_0 | // 16bit data for peripheral
 		DMA_CFGR1_MSIZE_1 | // 32bit data for memory
 		DMA_CFGR1_MINC | // Incrememt memory address

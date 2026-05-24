@@ -24,35 +24,9 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <stdbool.h>
 #include <stdint.h>
 
-#define DISPLAY_WIDTH (128U)
-#define DISPLAY_HEIGHT (64U)
-
-// The SPI mode would be set to SPI_MODE_MEMORY_CARD or SPI_MODE_MEMORY_CARD_SLOW by the FATFS module,
-// and would be set back to SPI_MODE_LCD after completion of the FATFS operation.
-// The userspace code can always assume the mode is SPI_MODE_LCD.
-enum spi_mode {
-	SPI_MODE_LCD,
-	SPI_MODE_MEMORY_CARD,
-	SPI_MODE_MEMORY_CARD_SLOW, // For card initialization.
-};
-
-// Also include code to initialize SPI interface, which's shared by the external memory card.
-void lcd_and_spi_init(void);
-// Default is SPI_MODE_LCD. But during initialization it's briefly switch to SPI_MODE_MEMORY_CARD_SLOW
-void lcd_spi_set_mode(enum spi_mode mode);
-
-// Send out the full 128x64 buffer, column major
-// The transfer is done with DMA and it isn't blocking.
-void lcd_transfer_begin(const void *buffer);
-bool lcd_is_transfer_in_progress(void);
-
-// Recommended to call once in a while so that any soft glitch would be fixed.
-// Please notice that calling this function would cause the LCD to blink briefly.
-// In case an LCD transfer is in progress, it'll block until completion of the transfer.
-void lcd_refresh(void);
-
-void lcd_set_brightness(uint8_t value); // Range: 0~15. The most effective values follows: 0, 3, 4, 5, 6, 7, 8
-void lcd_set_contrast(uint8_t value); // Range: 0~63
+void buzzer_init(void);
+void buzzer_set_volume(uint8_t volume); // Range: 0~15. 0 is silent, 15 is the loudest. Set the volume to zero to stop.
+void buzzer_set_buffer(const void *buffer); // Buffer size: 16 bytes. 1-bit audio. MSB of each byte got played first.
+void buzzer_set_pitch(uint8_t pitch); // Range: 0~255. Playback sample at rate of 4000*2^((pitch-64)/48) Hz

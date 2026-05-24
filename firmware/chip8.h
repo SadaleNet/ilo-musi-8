@@ -59,6 +59,8 @@ struct chip8_cpu {
 };
 
 #define CHIP8_REQUEST_WAIT_DISPLAY_REFRESH (1U << 0)
+#define CHIP8_REQUEST_AUDIO_BUFFER_UPDATED (1U << 1)
+#define CHIP8_REQUEST_AUDIO_PITCH_UPDATED (1U << 2)
 #define CHIP8_REQUEST_HALT_EXIT_EMULATOR (1U << 24) // Received instruction to exit the emulator
 #define CHIP8_REQUEST_HALT_I_ERROR (1U << 25) // I overread/overflow
 #define CHIP8_REQUEST_HALT_STACK_ERROR (1U << 26) // stack overflow/underflow

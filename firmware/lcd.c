@@ -57,7 +57,7 @@ const uint8_t LCD_REFRESH_SEQUENCE[] = {
 #define LCD_DEFAULT_CONTRAST (0x20)
 static uint8_t lcd_contrast; // Range: 0x00..0x3F
 
-static uint8_t* lcd_dma_buffer; // CONCURRENCY_VARIABLE: Written in lcd_transfer_begin(), read/written by lcd_transfer_next_row()
+static const uint8_t* lcd_dma_buffer; // CONCURRENCY_VARIABLE: Written in lcd_transfer_begin(), read/written by lcd_transfer_next_row()
 static size_t lcd_dma_row_index; // CONCURRENCY_VARIABLE: ditto
 static volatile bool lcd_dma_transfer_in_progress; // CONCURRENCY_VARIABLE: Written in lcd_transfer_begin() and DMA1_Channel3_IRQHandler(), read by lcd_is_transfer_in_progress()
 
@@ -138,20 +138,11 @@ void lcd_and_spi_init(void) {
 	GPIOC->CFGLR = (GPIO_CFGLR_OUT_PP << (4*0)) | (GPIO_CFGLR_OUT_PP << (4*1)) | (GPIO_CFGLR_OUT_PP << (4*2)) | (GPIO_CFGLR_OUT_AF_PP << (4*3)) | (GPIO_CFGLR_OUT_PP << (4*4)) // GPIO
 					| (GPIO_CFGLR_OUT_AF_PP << (4*5)) | (GPIO_CFGLR_OUT_AF_PP << (4*6)) | (GPIO_CFGLR_IN_FLOAT << (4*7)); // SPI
 
-	// Reset SPI and TIM1
-	RCC->PB2PRSTR |= RCC_SPI1RST | RCC_TIM1RST;
-	RCC->PB2PRSTR &= ~(RCC_SPI1RST | RCC_TIM1RST);
-	// Enable the SPI and TIM1 clock source
-	RCC->PB2PCENR |= RCC_SPI1EN | RCC_TIM1EN;
-
-	TIM1->PSC = 0x0000; // prescaler: 1
-	TIM1->ATRLR = 255; // Autoreload value
-	TIM1->CCER |= TIM1_CCER_CC3E; // Enable TIM1_CH3 output, negative polarity because TIM1_CCER_CC3P not specified
-	TIM1->CH3CVR = 0;
-	TIM1->SWEVGR |= TIM1_SWEVGR_UG; // Update the autoreload register AND the CH3CVR register
-	TIM1->CHCTLR2 |= TIM1_CHCTLR2_OC3PE | TIM1_CHCTLR2_OC3M_2 | TIM1_CHCTLR2_OC3M_1; // Set TIM1_CH3 to PWM mode 1
-	TIM1->BDTR |= TIM1_BDTR_MOE; // Enable TIM1's output
-	TIM1->CTLR1 |= TIM1_CTLR1_ARPE | TIM1_CTLR1_CEN; // Enable the timer itself
+	// Reset SPI
+	RCC->PB2PRSTR |= RCC_SPI1RST;
+	RCC->PB2PRSTR &= ~RCC_SPI1RST;
+	// Enable the SPI clock source
+	RCC->PB2PCENR |= RCC_SPI1EN;
 
 	// Configure SPI. SPI_Mode_Master and SPI_CTLR1_SPE must be set after CS pin is high
 	SPI1->CTLR1 =	SPI_CTLR1_BR_2 | SPI_CTLR1_BR_1 | SPI_CTLR1_BR_0 // Same as lcd_spi_set_mode(SPI_MODE_MEMORY_CARD_SLOW)
@@ -167,7 +158,7 @@ void lcd_and_spi_init(void) {
 	// Enable DMA (other component may also enable DMA on their own. No harm to enable it multiple times.)
 	RCC->HBPCENR |= RCC_DMA1EN;
 
-	// Configure DMA for ADC
+	// Configure DMA for SPI
 	DMA1_Channel3->PADDR = (uint32_t)(&SPI1->DATAR); // Peripheral address register
 
 	DMA1_Channel3->CFGR =
@@ -212,7 +203,7 @@ void lcd_and_spi_init(void) {
 	lcd_refresh();
 }
 
-void lcd_transfer_begin(void *buffer) {
+void lcd_transfer_begin(const void *buffer) {
 	// Wait until completion of the previous LCD DMA transfer
 	while(lcd_is_transfer_in_progress()){}
 
@@ -285,8 +276,6 @@ void lcd_refresh(void) {
 
 void lcd_set_brightness(uint8_t value) {
 	TIM1->CH3CVR = value;
-	// Update the CH3CVR register. It works without it but the specs said that it's required
-	TIM1->SWEVGR |= TIM1_SWEVGR_UG;
 }
 
 void lcd_set_contrast(uint8_t value) {

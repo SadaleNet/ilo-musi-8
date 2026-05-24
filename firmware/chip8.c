@@ -491,6 +491,7 @@ void chip8_step(struct chip8_machine *machine) {
 											(mem[(*i) + n*4 + 2] << 8) |
 											(mem[(*i) + n*4 + 3] << 0);
 					}
+					periph->requests |= CHIP8_REQUEST_AUDIO_BUFFER_UPDATED;
 				break;
 				case 0x0007: // FX07
 					*vx = periph->delay_timer;
@@ -538,6 +539,7 @@ void chip8_step(struct chip8_machine *machine) {
 				break;
 				case 0x003A: // FX3A XO-Chip
 					periph->audio_pitch = *vx;
+					periph->requests |= CHIP8_REQUEST_AUDIO_PITCH_UPDATED;
 				break;
 				case 0x0055: // FX55
 				{

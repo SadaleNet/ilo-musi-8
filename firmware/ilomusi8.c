@@ -26,7 +26,9 @@
 
 #include "chip8.h"
 #include "adc.h"
+#include "buzzer.h"
 #include "lcd.h"
+#include "tim1_pwm.h"
 #include "watchdog.h"
 
 #include "ch32fun.h"
@@ -250,10 +252,17 @@ int main() {
 	__set_INTSYSCR( __get_INTSYSCR() | 0x02 );
 
 	adc_init();
+	tim1_pwm_init(); // Required by LCD and buzzer
+	buzzer_init();
 	lcd_and_spi_init();
 
 	while(!adc_is_reading_ready()){}
+
+	uint8_t buzzer_volume = 3; // Just make up a value for testing
 	chip8_init(&chip8, &chip8_cfg);
+	buzzer_set_volume(0);
+	buzzer_set_buffer(chip8.periph.audio);
+	buzzer_set_pitch(chip8.periph.audio_pitch);
 	memcpy(&chip8.mem[CHIP8_PROGRAM_START_OFFSET], CHIP8_ROM, sizeof(CHIP8_ROM));
 
 	watchdog_feed();
@@ -266,7 +275,18 @@ int main() {
 			chip8.periph.random_num = SysTick->CNT;
 			chip8.periph.key_held = chip8_keymap(adc_button_get_state());
 			chip8.periph.key_just_released = chip8_keymap(adc_button_get_just_released());
-			chip8_step(&chip8);
+			if(!(chip8.periph.requests & CHIP8_REQUEST_WAIT_DISPLAY_REFRESH)) {
+				chip8_step(&chip8);
+				buzzer_set_volume(chip8.periph.sound_timer > 0 ? buzzer_volume : 0);
+				if(chip8.periph.requests & CHIP8_REQUEST_AUDIO_BUFFER_UPDATED) {
+					buzzer_set_buffer(chip8.periph.audio);
+					chip8.periph.requests &= ~CHIP8_REQUEST_AUDIO_BUFFER_UPDATED;
+				}
+				if(chip8.periph.requests & CHIP8_REQUEST_AUDIO_PITCH_UPDATED) {
+					buzzer_set_pitch(chip8.periph.audio_pitch);
+					chip8.periph.requests &= ~CHIP8_REQUEST_AUDIO_PITCH_UPDATED;
+				}
+			}
 
 			if(chip8.periph.requests & CHIP8_REQUEST_HALT_MASK) {
 				while(true);
@@ -277,8 +297,10 @@ int main() {
 		if(systick_now - last_lcd_refresh_tick >= FUNCONF_SYSTEM_CORE_CLOCK/60) { // 60fps
 			chip8_timer_step(&chip8);
 			memcpy(display_buffer, chip8.periph.display, sizeof(display_buffer));
+			buzzer_set_volume(chip8.periph.sound_timer > 0 ? buzzer_volume : 0);
 			lcd_transfer_begin(display_buffer);
 			last_lcd_refresh_tick = systick_now;
+			chip8.periph.requests &= ~CHIP8_REQUEST_WAIT_DISPLAY_REFRESH;
 		}
 
 		watchdog_feed();
