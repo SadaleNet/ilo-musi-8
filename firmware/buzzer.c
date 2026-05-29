@@ -45,6 +45,11 @@ static uint8_t buzzer_current_volume;
 	#define RCC_TIM3EN ((uint32_t)0x00000004)
 #endif
 
+#ifdef TIM3
+	#undef TIM3
+	#define TIM3 ((SLTM_TypeDef *)TIM3_BASE)
+#endif
+
 static void buzzer_reload_dma_buffer(void) {
 	static size_t buzzer_dma_buffer_index = 0;
 	size_t new_buffer_index = !buzzer_dma_buffer_index;
