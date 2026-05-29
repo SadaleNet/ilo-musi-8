@@ -48,6 +48,8 @@ uint32_t adc_button_state; // CONCURRENCY_VARIABLE: Written in adc_button_scan_n
 uint32_t adc_button_just_pressed; // CONCURRENCY_VARIABLE: Written in adc_button_scan_next_row(), read and reset in adc_button_get_just_pressed()
 uint32_t adc_button_just_released; // CONCURRENCY_VARIABLE: Written in adc_button_scan_next_row(), read and reset in adc_button_get_just_released()
 bool adc_card_inserted; // CONCURRENCY_VARIABLE: Written in adc_button_scan_next_row(), read by adc_card_is_inserted()
+bool adc_card_just_inserted; // CONCURRENCY_VARIABLE: Written in adc_button_scan_next_row(), read by adc_card_has_insert_event(), reset by adc_card_reset_insert_event()
+bool adc_card_just_removed; // CONCURRENCY_VARIABLE: Written in adc_button_scan_next_row(), read and reset by adc_card_is_just_removed()
 uint32_t adc_vref_reading_smoothed; // CONCURRENCY_VARIABLE: Written in adc_button_scan_next_row(), read by adc_get_supply_voltage()
 bool adc_reading_ready; // CONCURRENCY_VARIABLE: Written in adc_button_scan_next_row(), read by adc_is_reading_ready()
 #define ADC_BUTTON_STATE_SIZE (17)
@@ -101,7 +103,13 @@ void adc_button_scan_next_row(void) {
 
 	// Derive card insertion state and vref
 	if(row_scan_config[row_scan_index].pin_channel == 6) {
+		bool adc_card_inserted_prev = adc_card_inserted;
 		adc_card_inserted = (adc_dma_buffer[17] >= ADC_BUTTON_PRESSED_THRESHOLD);
+		if(!adc_card_inserted_prev && adc_card_inserted) {
+			adc_card_just_inserted = true;
+		} else if(adc_card_inserted_prev && !adc_card_inserted) {
+			adc_card_just_removed = true;
+		}
 		uint32_t adc_vref_reading = (adc_dma_buffer[18]+adc_dma_buffer[19])/2;
 		adc_vref_reading_smoothed = (adc_vref_reading_smoothed*7 + adc_vref_reading*1 + 4)/8; // +4 for rounding off the /8
 	}
@@ -128,7 +136,7 @@ void adc_button_scan_next_row(void) {
 	DMA1_Channel1->CNTR = ROW_SCAN_SEQUENCE_CHANNEL_COUNT; // number of items to read
 
 	// Configure GPIO for button scanning. The scanning row pin is set to output (which's set to HIGH inside adc_init()). Other pins are set to analog input.
-	GPIOD->CFGLR &= ~0x0FFFFF00; // Set PD2..6 to analog input
+	GPIOD->CFGLR &= ~((GPIO_CFGLR_MASK<<(4*2)) | (GPIO_CFGLR_MASK<<(4*3)) | (GPIO_CFGLR_MASK<<(4*4)) | (GPIO_CFGLR_MASK<<(4*5)) | (GPIO_CFGLR_MASK<<(4*6))); // Set PD2..6 to analog input
 	GPIOD->CFGLR |= (GPIO_CNF_OUT_PP|GPIO_Speed_10MHz) << (4*row_scan_config[row_scan_index].pin_channel); // Set the scanning pin to output HIGH
 
 	// Configure scanning channels
@@ -144,6 +152,10 @@ void INTERRUPT_DECORATOR DMA1_Channel1_IRQHandler(void) {
 }
 
 void adc_init(void) {
+	// This module implements charlieplex'd button handling with NKRO support
+	// It uses five pins (PD2..6) to take 18 inputs
+	// In addition, it also handles reading of internal voltage reference for deriving the supply voltage
+
 	// Reset ADC
 	RCC->PB2PRSTR |= RCC_ADC1RST;
 	RCC->PB2PRSTR &= ~RCC_ADC1RST;
@@ -214,12 +226,14 @@ void adc_init(void) {
 	// Initialize variables
 	asm volatile("" ::: "memory");
 	memset(adc_dma_buffer, 0, sizeof(adc_dma_buffer));
-	adc_reading_ready = false;
 	adc_button_state = 0;
 	adc_button_just_pressed = 0;
 	adc_button_just_released = 0;
 	adc_card_inserted = false;
+	adc_card_just_inserted = false;
+	adc_card_just_removed = false;
 	adc_vref_reading_smoothed = 0;
+	adc_reading_ready = false;
 
 	// Kick off the first scan!
 	adc_button_scan_next_row();
@@ -257,6 +271,28 @@ bool adc_card_is_inserted(void) {
 	asm volatile("" ::: "memory");
 	return adc_card_inserted;
 }
+
+bool adc_card_has_insert_event(void) {
+	asm volatile("" ::: "memory");
+	return adc_card_just_inserted;
+}
+
+void adc_card_reset_insert_event(void) {
+	PFIC->IRER[DMA1_Channel1_IRQn/32] |= (1<<(DMA1_Channel1_IRQn%32));
+	asm volatile("" ::: "memory");
+	adc_card_just_inserted = false;
+	PFIC->IENR[DMA1_Channel1_IRQn/32] |= (1<<(DMA1_Channel1_IRQn%32));
+}
+
+bool adc_card_is_just_removed(void) {
+	PFIC->IRER[DMA1_Channel1_IRQn/32] |= (1<<(DMA1_Channel1_IRQn%32));
+	asm volatile("" ::: "memory");
+	uint32_t ret = adc_card_just_removed;
+	adc_card_just_removed = false;
+	PFIC->IENR[DMA1_Channel1_IRQn/32] |= (1<<(DMA1_Channel1_IRQn%32));
+	return ret;
+}
+
 
 uint32_t adc_get_supply_voltage(void) {
 	asm volatile("" ::: "memory");

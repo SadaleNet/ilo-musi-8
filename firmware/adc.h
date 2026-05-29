@@ -46,5 +46,8 @@ uint32_t adc_button_get_just_pressed(void); // 1 is event triggered. 0 is idle. 
 uint32_t adc_button_get_just_released(void); // ditto
 
 bool adc_card_is_inserted(void); // external memory card state. true if inserted. false else.
+bool adc_card_has_insert_event(void);
+void adc_card_reset_insert_event(void);
+bool adc_card_is_just_removed(void);
 
 uint32_t adc_get_supply_voltage(void); // Unit: mV. This function involves software division and might be slow. Don't call too often.
