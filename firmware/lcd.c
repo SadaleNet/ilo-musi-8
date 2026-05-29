@@ -24,14 +24,13 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include "adc.h"
 #include "lcd.h"
-#include "ch32fun.h"
 
+#include "ch32fun.h"
 #include <stdbool.h>
 #include <stdint.h>
 
-
-#define PIN_CARD_CS (0)
 #define PIN_LCD_CS (1)
 #define PIN_LCD_DC (2)
 #define PIN_LCD_BL (3)
@@ -60,6 +59,7 @@ static uint8_t lcd_contrast; // Range: 0x00..0x3F
 static const uint8_t* lcd_dma_buffer; // CONCURRENCY_VARIABLE: Written in lcd_transfer_begin(), read/written by lcd_transfer_next_row()
 static size_t lcd_dma_row_index; // CONCURRENCY_VARIABLE: ditto
 static volatile bool lcd_dma_transfer_in_progress; // CONCURRENCY_VARIABLE: Written in lcd_transfer_begin() and DMA1_Channel3_IRQHandler(), read by lcd_is_transfer_in_progress()
+static volatile bool lcd_display_config_updated; // CONCURRENCY_VARIABLE: Written in lcd_set_contrast(), lcd_refresh() and DMA1_Channel3_IRQHandler(), read by DMA1_Channel3_IRQHandler()
 
 static void lcd_use_command_mode(void) {
 	// LCD CS LOW, DC LOW (select LCD, send command)
@@ -72,8 +72,8 @@ static void lcd_use_data_mode(void) {
 }
 
 static void lcd_use_deselect_mode(void) {
-	// LCD CS HIGH, CAFD CS HIGH
-	GPIOC->BSHR = ((1<<PIN_LCD_CS)<<0) | ((1<<PIN_CARD_CS)<<0);
+	// LCD CS HIGH
+	GPIOC->BSHR = ((1<<PIN_LCD_CS)<<0);
 }
 
 static void lcd_spi_send_byte(uint8_t data) {
@@ -112,48 +112,47 @@ void INTERRUPT_DECORATOR DMA1_Channel3_IRQHandler(void) {
 	// DMA SPI TX transfer compelte only look for TXE flag and doesn't wait for BSY flag
 	while(SPI1->STATR & SPI_STATR_BSY){}
 
-	if(++lcd_dma_row_index < DISPLAY_HEIGHT/8) {
-		lcd_transfer_next_row();
-	} else {
-		// Turn on display after completing the DMA transfer
-		lcd_use_command_mode();
-		lcd_spi_send_byte(0xAF);
-
-		// All done. Deselecting LCD CS
+	if(adc_card_has_insert_event()) {
+		// Card insertion event detected
+		// Aborting LCD rendering immediately!
 		lcd_use_deselect_mode();
 		lcd_dma_transfer_in_progress = false;
+	} else {
+		if(++lcd_dma_row_index < DISPLAY_HEIGHT/8) {
+			lcd_transfer_next_row();
+		} else {
+			if(lcd_display_config_updated) {
+				lcd_use_command_mode();
+				// Set contrast
+				lcd_spi_send_byte(0x81);
+				lcd_spi_send_byte(lcd_contrast);
+				// Turn on display
+				lcd_spi_send_byte(0xAF);
+				lcd_display_config_updated = false;
+			}
+
+			// All done. Deselecting LCD CS
+			// Must deselect even if lcd_display_config_updated is false
+			// becasue the DMA transfer itself would have selected the LCD CS
+			lcd_use_deselect_mode();
+			lcd_dma_transfer_in_progress = false;
+		}
 	}
 }
 
-void lcd_and_spi_init(void) {
+void lcd_init_first_stage(void) {
+	// This module owns the following pins: LCD_CS, LCD_DC, LCD_DC, LCD_RES
+	// This module also owns the SPI's DMA because the card ain't using it.
+
 	// Enable the GPIO
 	RCC->PB2PCENR |= RCC_IOPCEN;
 
-	// Deselect LCD CS and card CS
+	// Deselect LCD CS
 	lcd_use_deselect_mode();
 
-	// GPIO C0, C1, C2, C4 to output PUSH-PULL
-	// C3, C5, C6 to output ALT PUSH-PULL,
-	// C7 to INPUT FLOATING (must use floating because we have external pull-up to take care of memory card's requirement)
-	GPIOC->CFGLR = (GPIO_CFGLR_OUT_PP << (4*0)) | (GPIO_CFGLR_OUT_PP << (4*1)) | (GPIO_CFGLR_OUT_PP << (4*2)) | (GPIO_CFGLR_OUT_AF_PP << (4*3)) | (GPIO_CFGLR_OUT_PP << (4*4)) // GPIO
-					| (GPIO_CFGLR_OUT_AF_PP << (4*5)) | (GPIO_CFGLR_OUT_AF_PP << (4*6)) | (GPIO_CFGLR_IN_FLOAT << (4*7)); // SPI
-
-	// Reset SPI
-	RCC->PB2PRSTR |= RCC_SPI1RST;
-	RCC->PB2PRSTR &= ~RCC_SPI1RST;
-	// Enable the SPI clock source
-	RCC->PB2PCENR |= RCC_SPI1EN;
-
-	// Configure SPI. SPI_Mode_Master and SPI_CTLR1_SPE must be set after CS pin is high
-	SPI1->CTLR1 =	SPI_CTLR1_BR_2 | SPI_CTLR1_BR_1 | SPI_CTLR1_BR_0 // Same as lcd_spi_set_mode(SPI_MODE_MEMORY_CARD_SLOW)
-					| (SPI_CPOL_Low | SPI_CPHA_1Edge) // SPI Mode 0 (That's for the card. LCD requires SPI mode 3 instead (SPI_CPOL_High | SPI_CPHA_2Edge))
-					| SPI_NSS_Soft // Software NSS mode
-					| SPI_Mode_Master // Master mode
-					| 0 // (lack of SPI_CTLR1_DFF) 8bit mode
-					| SPI_Direction_2Lines_FullDuplex // Use both MOSI and MISO
-					| SPI_CTLR1_SPE; // SPI begin!
-
-	SPI1->CTLR2 |= SPI_CTLR2_TXDMAEN;
+	// GPIO PC1, PC2, PC4 is output PUSH-PULL, PC3 is output ALT PUSH-PULL
+	GPIOC->CFGLR &= ~((GPIO_CFGLR_MASK << (4*1)) | (GPIO_CFGLR_MASK << (4*2)) | (GPIO_CFGLR_MASK << (4*3)) | (GPIO_CFGLR_MASK << (4*4)));
+	GPIOC->CFGLR |= (GPIO_CFGLR_OUT_PP << (4*1)) | (GPIO_CFGLR_OUT_PP << (4*2)) | (GPIO_CFGLR_OUT_AF_PP << (4*3)) | (GPIO_CFGLR_OUT_PP << (4*4));
 
 	// Enable DMA (other component may also enable DMA on their own. No harm to enable it multiple times.)
 	RCC->HBPCENR |= RCC_DMA1EN;
@@ -173,30 +172,22 @@ void lcd_and_spi_init(void) {
 	// Clear the interrupt flag, just in case.
 	DMA1->INTFCR |= DMA_CTCIF3;
 
-	SPI1->CTLR1 |= SPI_CTLR1_SPE;
-
 	// Configure interrupt controller
 	// PFIC: Enable interrupt for DMA1_Channel3_IRQn
-	PFIC->IPRIOR[DMA1_Channel3_IRQn] = 0x00; // The priority is 0 (the highest, and it cannot be preempted)
+	PFIC->IPRIOR[DMA1_Channel3_IRQn] = 0x80; // The priority is 0x80 (the highest but that it can be preempted)
 	PFIC->IENR[DMA1_Channel3_IRQn/32] |= (1<<(DMA1_Channel3_IRQn%32));
 
 	lcd_dma_transfer_in_progress = false;
 	lcd_contrast = LCD_DEFAULT_CONTRAST;
-	// Must do card initialization before doing LCD initialization to put the card into SPI mode
-	// TODO: uncomment this piece of code after memory card driver's implemented
-	// maybe also check if the card has been inserted first
-	// maybe use callback function so that lcd.c won't have to hold the FATFS handle
-	//FATFS fs;
-	//if (pf_mount(&fs) != FR_OK){
-		// card mount error handling goes here
-	//}
-
-	lcd_spi_set_mode(SPI_MODE_LCD);
+	lcd_display_config_updated = true;
 
 	Delay_Ms(20); // Wait for power to stabalize (LCD specs recommends >1ms)
 	// Toggle LCD RES pin (first set it to LOW, then set it to HIGH)
 	GPIOC->BSHR = ((1<<PIN_LCD_RES)<<16);
 	Delay_Us(100); // LCD's requirement: >5us
+}
+
+void lcd_init_second_stage(void) {
 	GPIOC->BSHR = ((1<<PIN_LCD_RES)<<0);
 	Delay_Us(100); // LCD's requirement: >5us
 
@@ -219,45 +210,6 @@ bool lcd_is_transfer_in_progress(void) {
 	return lcd_dma_transfer_in_progress;
 }
 
-void lcd_spi_set_mode(enum spi_mode mode) {
-	switch(mode) {
-		case SPI_MODE_LCD:
-			// Deselect card CS pin
-			lcd_use_deselect_mode();
-			// Send out a byte to complete the deselection process
-			lcd_spi_send_byte(0xFF);
-
-			// Go back to LCD mode (mode 3)
-			//SPI1->CTLR1 &= ~(SPI_CPOL_High | SPI_CPHA_2Edge); // redundant because we're gonna use |=
-			SPI1->CTLR1 |= (SPI_CPOL_High | SPI_CPHA_2Edge);
-
-			// LCD max 20Mhz
-			// Setting the divider to 4. That'd be 48Mhz/4 = 12Mhz
-			SPI1->CTLR1 &= ~SPI_CTLR1_BR;
-			SPI1->CTLR1 |= SPI_CTLR1_BR_1;
-		break;
-		case SPI_MODE_MEMORY_CARD:
-		case SPI_MODE_MEMORY_CARD_SLOW:
-			// Wait until completion of LCD DMA transfer
-			while(lcd_is_transfer_in_progress()){}
-
-			// Switch to SPI mode 0 for memory card
-			SPI1->CTLR1 &= ~(SPI_CPOL_High | SPI_CPHA_2Edge);
-
-			if(mode == SPI_MODE_MEMORY_CARD) {
-				// Card max 25Mhz
-				// Setting the divider to 2. That'd be 48Mhz/2 = 24Mhz
-				SPI1->CTLR1 &= ~SPI_CTLR1_BR;
-			} else { // mode == SPI_MODE_MEMORY_CARD_SLOW
-				// Required data rate for card: 100kHz ~ 400kHz
-				// Setting the divider to 256. That'd be 48Mhz/256 = 187kHz
-				// SPI1->CTLR1 &= ~SPI_CTLR1_BR; // Commenting out. Redundant.
-				SPI1->CTLR1 |= SPI_CTLR1_BR_2 | SPI_CTLR1_BR_1 | SPI_CTLR1_BR_0;
-			}
-		break;
-	}
-}
-
 void lcd_refresh(void) {
 	// Wait until completion of LCD DMA transfer
 	while(lcd_is_transfer_in_progress()){}
@@ -267,11 +219,10 @@ void lcd_refresh(void) {
 	for (size_t i=0; i<sizeof(LCD_REFRESH_SEQUENCE)/sizeof(*LCD_REFRESH_SEQUENCE); i++) {
 		lcd_spi_send_byte(LCD_REFRESH_SEQUENCE[i]);
 	}
-	// All done. Deselect LCD CS pin
+	// All done. Deselect LCD CS pin. Please keep in mind that the display would be turned off until
+	// the next lcd_transfer_begin() is called and the DMA it kicks off completed the transfer
 	lcd_use_deselect_mode();
-
-	// Also set contrast because the contrast setting would be erased after refresh
-	lcd_set_contrast(lcd_contrast);
+	lcd_display_config_updated = true;
 }
 
 void lcd_set_brightness(uint8_t value) {
@@ -279,11 +230,6 @@ void lcd_set_brightness(uint8_t value) {
 }
 
 void lcd_set_contrast(uint8_t value) {
-	// Wait until completion of LCD DMA transfer
-	while(lcd_is_transfer_in_progress()){}
-
-	lcd_use_command_mode();
-	lcd_spi_send_byte(0x81);
-	lcd_spi_send_byte(value);
-	lcd_use_deselect_mode();
+	lcd_contrast = value;
+	lcd_display_config_updated = true;
 }

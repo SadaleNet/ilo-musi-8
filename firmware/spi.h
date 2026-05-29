@@ -27,23 +27,20 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define DISPLAY_WIDTH (128U)
-#define DISPLAY_HEIGHT (64U)
+#include "fatfs/ff.h"
 
-// Perform initialization without involving SPI. Start resetting LCD for turning it off
-void lcd_init_first_stage(void);
-// Perform initialization with SPI sequence. Also complete resetting LCD
-void lcd_init_second_stage(void);
+// The SPI mode would be set to SPI_MODE_MEMORY_CARD or SPI_MODE_MEMORY_CARD_SLOW by the FATFS module,
+// and would be set back to SPI_MODE_LCD after completion of the FATFS operation.
+// The userspace code can always assume the mode is SPI_MODE_LCD.
+enum spi_mode {
+	SPI_MODE_LCD,
+	SPI_MODE_MEMORY_CARD,
+	SPI_MODE_MEMORY_CARD_SLOW, // For card initialization.
+};
 
-// Send out the full 128x64 buffer, column major
-// The transfer is done with DMA and it isn't blocking.
-void lcd_transfer_begin(const void *buffer);
-bool lcd_is_transfer_in_progress(void);
-
-// Recommended to call once in a while so that any soft glitch would be fixed.
-// Please notice that calling this function would cause the LCD to blink for like half a second.
-// In case an LCD transfer is in progress, it'll block until completion of the transfer.
-void lcd_refresh(void);
-
-void lcd_set_brightness(uint8_t value); // Range: 0~15. The most effective values follows: 0, 3, 4, 5, 6, 7, 8
-void lcd_set_contrast(uint8_t value); // Range: 0~63
+void spi_init(void);
+void spi_send_byte(uint8_t data);
+void spi_set_mode(enum spi_mode mode);
+FRESULT spi_card_mount_filesystem(void);
+bool spi_card_is_filesystem_mounted(void);
+void spi_card_reset_mounted_state(void); // call when card removal's been detected

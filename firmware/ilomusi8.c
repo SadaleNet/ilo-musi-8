@@ -25,12 +25,15 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include "chip8.h"
+
 #include "adc.h"
 #include "buzzer.h"
 #include "lcd.h"
+#include "spi.h"
 #include "tim1_pwm.h"
 #include "watchdog.h"
 
+#include "fatfs/ff.h"
 #include "ch32fun.h"
 #include <stdio.h>
 
@@ -40,9 +43,7 @@
 #define CHIP8_QUIRK_PLATFORM_SCHIP (CHIP8_QUIRK_SHIFT|CHIP8_QUIRK_MEMORY_LEAVE_I_UNCHANGED|CHIP8_QUIRK_JUMP|CHIP8_QUIRK_HIRES_COLLISION)
 #define CHIP8_QUIRK_PLATFORM_XOCHIP (CHIP8_QUIRK_WRAP|CHIP8_QUIRK_LORES_WIDE_SPRITE|CHIP8_QUIRK_RESIZE_CLEAR_SCREEN)
 static struct chip8_machine chip8;
-static uint8_t display_buffer[sizeof(chip8.periph.display)];
-// static uint8_t display_buffer[DISPLAY_WIDTH*DISPLAY_HEIGHT/8];
-static struct chip8_config chip8_cfg = {
+static const struct chip8_config chip8_cfg = {
 	.font = {
 		0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
 		0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -85,7 +86,7 @@ static struct chip8_config chip8_cfg = {
 	.quirks = CHIP8_QUIRK_PLATFORM_XOCHIP
 };
 
-uint8_t CHIP8_ROM[] = {
+static const uint8_t CHIP8_ROM[] = {
 	0x15, 0x07, 0x99, 0x24, 0x7e, 0x24, 0x7e, 0x24, 0x18, 0x3c, 0x42, 0x42,
 	0x42, 0x3c, 0x42, 0x81, 0x00, 0x8e, 0x51, 0x21, 0x51, 0x8e, 0x00, 0x04,
 	0x6a, 0x92, 0x7c, 0x10, 0x10, 0x10, 0x10, 0x54, 0xba, 0x82, 0x82, 0x44,
@@ -254,9 +255,22 @@ int main() {
 	adc_init();
 	tim1_pwm_init(); // Required by LCD and buzzer
 	buzzer_init();
-	lcd_and_spi_init();
 
-	while(!adc_is_reading_ready()){}
+	lcd_init_first_stage(); // Initialize IO. Turns off LCD
+	spi_init(); // Depends on lcd_init_first_stage()
+
+	while(!adc_is_reading_ready()){} // Depends on tim1_pwm_init()
+
+	// Depends on adc_is_reading_ready()
+	if(adc_card_has_insert_event()) {
+		// Must be the first SPI operation to run
+		// spi_set_mode(SPI_MODE_MEMORY_CARD_SLOW); // No need. That's because it's same as the initial state
+		spi_card_mount_filesystem();
+		adc_card_reset_insert_event();
+	}
+
+	spi_set_mode(SPI_MODE_LCD);
+	lcd_init_second_stage(); // If card's inserted, must be done after spi_card_mount_filesystem()
 
 	uint8_t buzzer_volume = 3; // Just make up a value for testing
 	chip8_init(&chip8, &chip8_cfg);
@@ -267,11 +281,27 @@ int main() {
 
 	watchdog_feed();
 
-	uint32_t last_frame_refresh_tick = SysTick->CNT;
-	uint32_t last_lcd_refresh_tick = SysTick->CNT;
+	uint32_t periodic_read = SysTick->CNT;
+	uint32_t last_frame_processed_tick = SysTick->CNT;
+	uint32_t last_lcd_blit_tick = SysTick->CNT;
 	while(1) {
+		// Handle card reinsertion. Must initialize before any LCD SPI communication
+		// In practice, if LCD SPI communicaition is on-going, it won't stop until the row's sent
+		// so there might be a bit of delay of SPI initialization for the card
+		if(adc_card_is_just_removed()) {
+			spi_card_reset_mounted_state();
+		}
+		if(adc_card_has_insert_event()) {
+			while(lcd_is_transfer_in_progress()){}
+			spi_set_mode(SPI_MODE_MEMORY_CARD_SLOW);
+			spi_card_mount_filesystem();
+			spi_set_mode(SPI_MODE_LCD);
+			adc_card_reset_insert_event();
+			printf("RESET\n");
+		}
+
 		uint32_t systick_now = SysTick->CNT;
-		if(systick_now - last_frame_refresh_tick >= FUNCONF_SYSTEM_CORE_CLOCK/60/CYCLE_PER_FRAME) { // (60 x CYCLE_PER_FRAME) fps
+		if(systick_now - last_frame_processed_tick >= FUNCONF_SYSTEM_CORE_CLOCK/60/CYCLE_PER_FRAME) { // (60 x CYCLE_PER_FRAME) fps
 			chip8.periph.random_num = SysTick->CNT;
 			chip8.periph.key_held = chip8_keymap(adc_button_get_state());
 			chip8.periph.key_just_released = chip8_keymap(adc_button_get_just_released());
@@ -291,16 +321,52 @@ int main() {
 			if(chip8.periph.requests & CHIP8_REQUEST_HALT_MASK) {
 				while(true);
 			}
-			last_frame_refresh_tick = systick_now;
+			last_frame_processed_tick = systick_now;
 		}
 
-		if(systick_now - last_lcd_refresh_tick >= FUNCONF_SYSTEM_CORE_CLOCK/60) { // 60fps
+		if(systick_now - last_lcd_blit_tick >= FUNCONF_SYSTEM_CORE_CLOCK/60) { // 60fps
 			chip8_timer_step(&chip8);
-			memcpy(display_buffer, chip8.periph.display, sizeof(display_buffer));
 			buzzer_set_volume(chip8.periph.sound_timer > 0 ? buzzer_volume : 0);
-			lcd_transfer_begin(display_buffer);
-			last_lcd_refresh_tick = systick_now;
+			// There's no double-buffering to save 1kB of RAM.
+			// There still won't be tearing because the LCD's response time
+			// is slow enough to have any tearing visible
+			lcd_transfer_begin(chip8.periph.display);
+			last_lcd_blit_tick = systick_now;
 			chip8.periph.requests &= ~CHIP8_REQUEST_WAIT_DISPLAY_REFRESH;
+		}
+
+		if(systick_now - periodic_read >= FUNCONF_SYSTEM_CORE_CLOCK/10) {
+			if(spi_card_is_filesystem_mounted()) {
+				while(lcd_is_transfer_in_progress()){}
+				printf("R");
+				spi_set_mode(SPI_MODE_MEMORY_CARD);
+				static FIL fil;
+				BYTE buffer[512];
+				FRESULT fr;
+				UINT br;
+				fr = f_open(&fil, "test.txt", FA_READ);
+				if (fr == FR_OK) {
+					for (;;) {
+						fr = f_read(&fil, buffer, sizeof(buffer), &br);
+						//printf("fr: %u br: %u\n", fr, br);
+						if (fr != FR_OK)
+							printf("[%u]", fr);
+						if (fr != FR_OK || br == 0) break;
+						//for(int i=0; i<br; i++) {
+						//	putchar(buffer[i]);
+						//}
+					}
+					printf(".");
+
+					f_close(&fil);
+				} else {
+					printf("%u", fr);
+				}
+				spi_set_mode(SPI_MODE_LCD);
+			} else {
+				printf("r");
+			}
+			periodic_read = systick_now;
 		}
 
 		watchdog_feed();
