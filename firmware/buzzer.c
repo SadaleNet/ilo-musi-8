@@ -98,6 +98,15 @@ void buzzer_init(void) {
 	// Configure DMA for automated audio sample playback
 	RCC->HBPCENR |= RCC_DMA1EN; // Enable DMA (other component may also enable DMA on their own. No harm to enable it multiple times.)
 
+
+	// Initialize DMA buffer and variables
+	// Must be done before DMA1_Channel4 |= DMA_CFGR1_EN
+	memset(buzzer_buffer, 0, sizeof(buzzer_buffer));
+	memset(buzzer_dma_buffer, 0, sizeof(buzzer_dma_buffer));
+	buzzer_current_volume = 0;
+	buzzer_set_pitch(0);
+	buzzer_reload_dma_buffer();
+
 	DMA1_Channel4->PADDR = (uint32_t)(&TIM1->CH1CVR); // Peripheral address register
 	DMA1_Channel4->CNTR = BUZZER_BUFFER_LENGTH;
 	DMA1_Channel4->CFGR =
@@ -108,13 +117,6 @@ void buzzer_init(void) {
 		DMA_CFGR1_CIRC | // Enable cycle mode
 		DMA_CFGR1_DIR | // Read from memory, write to peripheral
 		DMA_CFGR1_EN; // Enable channel
-
-	// Initialize DMA buffer and variables
-	memset(buzzer_buffer, 0, sizeof(buzzer_buffer));
-	memset(buzzer_dma_buffer, 0, sizeof(buzzer_dma_buffer));
-	buzzer_current_volume = 0;
-	buzzer_set_pitch(0);
-	buzzer_reload_dma_buffer();
 
 	// Configure PD0 as AF_PP after everything else's ready
 	GPIOD->CFGLR &= ~(GPIO_CFGLR_MASK << (4*0));
