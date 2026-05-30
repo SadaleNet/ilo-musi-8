@@ -27,7 +27,6 @@
 #include "chip8.h"
 #include <string.h>
 #include <assert.h>
-#include <stdio.h>
 
 static uint8_t chip8_check_collision(uint8_t old, uint8_t new) {
 	// Truth table:
