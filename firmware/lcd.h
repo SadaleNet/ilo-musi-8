@@ -46,4 +46,5 @@ bool lcd_is_transfer_in_progress(void);
 void lcd_refresh(void);
 
 void lcd_set_brightness(uint8_t value); // Range: 0~15. The most effective values follows: 0, 3, 4, 5, 6, 7, 8
+void lcd_set_backlight_suppression(bool value); // For suppression backlight during card reading operation to avoid overloading the power supply
 void lcd_set_contrast(uint8_t value); // Range: 0~63

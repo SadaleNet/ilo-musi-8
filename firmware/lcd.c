@@ -54,7 +54,10 @@ const uint8_t LCD_REFRESH_SEQUENCE[] = {
 };
 
 #define LCD_DEFAULT_CONTRAST (0x20)
+#define LCD_DEFAULT_BACKLIGHT (0)
 static uint8_t lcd_contrast; // Range: 0x00..0x3F
+static uint8_t lcd_backlight; // Range: 0~15
+static bool lcd_backlight_suppressed;
 
 static const uint8_t* lcd_dma_buffer; // CONCURRENCY_VARIABLE: Written in lcd_transfer_begin(), read/written by lcd_transfer_next_row()
 static size_t lcd_dma_row_index; // CONCURRENCY_VARIABLE: ditto
@@ -179,6 +182,8 @@ void lcd_init_first_stage(void) {
 
 	lcd_dma_transfer_in_progress = false;
 	lcd_contrast = LCD_DEFAULT_CONTRAST;
+	lcd_backlight = LCD_DEFAULT_BACKLIGHT;
+	lcd_backlight_suppressed = true;
 	lcd_display_config_updated = true;
 
 	Delay_Ms(20); // Wait for power to stabalize (LCD specs recommends >1ms)
@@ -225,8 +230,18 @@ void lcd_refresh(void) {
 	lcd_display_config_updated = true;
 }
 
+static void lcd_set_brightness_inner(void) {
+	TIM1->CH3CVR = lcd_backlight_suppressed ? 0 : lcd_backlight;
+}
+
 void lcd_set_brightness(uint8_t value) {
-	TIM1->CH3CVR = value;
+	lcd_backlight = value;
+	lcd_set_brightness_inner();
+}
+
+void lcd_set_backlight_suppression(bool value) {
+	lcd_backlight_suppressed = value;
+	lcd_set_brightness_inner();
 }
 
 void lcd_set_contrast(uint8_t value) {

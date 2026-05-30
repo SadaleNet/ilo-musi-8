@@ -25,6 +25,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include "adc.h"
+#include "lcd.h"
 #include "spi.h"
 
 #include "ch32fun.h"
@@ -83,6 +84,7 @@ void spi_send_byte(uint8_t data) {
 void spi_set_mode(enum spi_mode mode) {
 	switch(mode) {
 		case SPI_MODE_LCD:
+			lcd_set_backlight_suppression(false);
 			// Go back to LCD mode (mode 3)
 			//SPI1->CTLR1 &= ~(SPI_CPOL_High | SPI_CPHA_2Edge); // redundant because we're gonna use |=
 			SPI1->CTLR1 |= (SPI_CPOL_High | SPI_CPHA_2Edge);
@@ -94,6 +96,7 @@ void spi_set_mode(enum spi_mode mode) {
 		break;
 		case SPI_MODE_MEMORY_CARD:
 		case SPI_MODE_MEMORY_CARD_SLOW:
+			lcd_set_backlight_suppression(true);
 			SPI1->DATAR; // Clear the RX byte
 
 			// Switch to SPI mode 0 for memory card
