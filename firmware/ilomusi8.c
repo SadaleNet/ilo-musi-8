@@ -28,6 +28,7 @@
 
 #include "adc.h"
 #include "buzzer.h"
+#include "draw.h"
 #include "lcd.h"
 #include "spi.h"
 #include "tim1_pwm.h"
@@ -280,6 +281,28 @@ int main() {
 	memcpy(&chip8.mem[CHIP8_PROGRAM_START_OFFSET], CHIP8_ROM, sizeof(CHIP8_ROM));
 
 	watchdog_feed();
+
+	{ // Temporary code for font test
+		uint32_t last_lcd_blit_tick = SysTick->CNT;
+		uint8_t counter = 0;
+		while(1) {
+			uint32_t systick_now = SysTick->CNT;
+			if(systick_now - last_lcd_blit_tick >= FUNCONF_SYSTEM_CORE_CLOCK/10) { // 60fps
+				draw_clear(chip8.periph.display);
+				draw_text(chip8.periph.display, "THE QUICK BROWN FOX", 0, 0);
+				draw_text(chip8.periph.display, "JUMPS OVER THE LAZY", 0, 6);
+				draw_text(chip8.periph.display, "DOG. !\"#$%&'()*+,-./", 0, 12);
+
+				draw_text(chip8.periph.display, "the quick brown fox", 0, 24);
+				draw_text(chip8.periph.display, "jumps over the lazy", 0, 30);
+				draw_text(chip8.periph.display, "dog. :;<=>?@[\\]^_", 0, 36);
+				draw_text(chip8.periph.display, "0123456789 `{|}~", 0, 48);
+				lcd_transfer_begin(chip8.periph.display);
+				last_lcd_blit_tick = systick_now;
+			}
+			watchdog_feed();
+		}
+	}
 
 	uint32_t periodic_read = SysTick->CNT;
 	uint32_t last_frame_processed_tick = SysTick->CNT;
