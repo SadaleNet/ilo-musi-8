@@ -121,7 +121,9 @@ uint8_t flash_write_sector(uint32_t offset, void *data) {
 }
 
 uint8_t spi_send_byte(uint8_t data) {
-	while(!(SPI1->STATR & SPI_STATR_TXE)){}
+	// Commenting out TXE handling saves 12 bytes
+	// Since we wait for transfer completion after each byte, TX buffer should always be empty anyway.
+	// while(!(SPI1->STATR & SPI_STATR_TXE)){}
 	SPI1->DATAR = data;
 	// Wait until completion of transfer.
 	// That's because we might want to change the slave select line
@@ -142,7 +144,7 @@ void lcd_transfer_row(int i, uint8_t buffer[128]) {
 	GPIOC->BSHR = ((1<<PIN_LCD_DC)<<0);
 	// Send the row's data to LCD
 	for (int j = 0; j < 128; j++) {
-		// Send data for first row. Hard-code to stripe for remaining rows
+		// Send data for last row. Hard-code to stripe for remaining rows
 		if(i == 7) {
 			spi_send_byte(buffer[j]);
 		} else {
