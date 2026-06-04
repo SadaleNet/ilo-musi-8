@@ -38,23 +38,31 @@
 #include "fatfs/ff.h"
 #include "ch32fun.h"
 #include <stdio.h>
+#include <string.h>
 
 #define CYCLE_PER_FRAME (200) // Benchmark without buzzer: 8100fps max, which's 135 cycles per frame
 
 #define CHIP8_QUIRK_PLATFORM_VIP (CHIP8_QUIRK_VBLANK|CHIP8_QUIRK_LOGIC)
 #define CHIP8_QUIRK_PLATFORM_SCHIP (CHIP8_QUIRK_SHIFT|CHIP8_QUIRK_MEMORY_LEAVE_I_UNCHANGED|CHIP8_QUIRK_JUMP|CHIP8_QUIRK_HIRES_COLLISION)
 #define CHIP8_QUIRK_PLATFORM_XOCHIP (CHIP8_QUIRK_WRAP|CHIP8_QUIRK_LORES_WIDE_SPRITE|CHIP8_QUIRK_RESIZE_CLEAR_SCREEN)
+
+enum {
+	SCREEN_MENU,
+	SCREEN_GAMEPLAY,
+} screen_state;
+
 static struct chip8_machine chip8;
 
-static uint16_t chip8_keymap(uint16_t button_state) {
+static uint32_t chip8_keymap(uint32_t button_state) {
 	// Converts from the left layout to the right layout
+	//      [16]                      [0x10]
 	// [0]  [1]  [2]  [3]         [1] [2] [3] [C]
 	// [4]  [5]  [6]  [7]         [4] [5] [6] [D]
 	// [8]  [9]  [10] [11]        [7] [8] [9] [E]
 	// [12] [13] [14] [15]        [A] [0] [B] [F]
-	uint16_t ret = 0;
+	uint32_t ret = 0;
 	const unsigned int BUTTON_MAP[] = {13, 0, 1, 2, 4, 5, 6, 8, 9, 10,
-		12, 14, 3, 7, 11, 15};
+		12, 14, 3, 7, 11, 15, 16};
 	for(int i=0; i<sizeof(BUTTON_MAP)/sizeof(*BUTTON_MAP); i++) {
 		if(button_state & (1<<BUTTON_MAP[i])) {
 			ret |= 1<<i;
@@ -87,6 +95,8 @@ int main() {
 	spi_set_mode(SPI_MODE_LCD);
 	lcd_init_second_stage(); // If card's inserted, must be done after spi_card_mount_filesystem()
 
+	screen_state = SCREEN_MENU;
+
 	uint8_t buzzer_volume = 3; // Just make up a value for testing
 	buzzer_set_volume(0);
 	buzzer_set_buffer(chip8.periph.audio);
@@ -94,47 +104,136 @@ int main() {
 
 	watchdog_feed();
 
-	printf("%u\n", file_load_rom("GAME.CH8", &chip8));
+	#define MENU_PAGE_SIZE (10)
+	static char menu_file_list[MENU_PAGE_SIZE][14];
+	char menu_current_dir[256] = {0};
+	int menu_offset = 0;
+	size_t menu_file_count_of_current_page = 0;
+	bool menu_dir_reload_required = true;
+	bool menu_display_update_required = true;
 
 	uint32_t last_frame_processed_tick = SysTick->CNT;
 	uint32_t last_lcd_blit_tick = SysTick->CNT;
 	while(1) {
 		file_loop();
 
-		uint32_t systick_now = SysTick->CNT;
-		if(systick_now - last_frame_processed_tick >= FUNCONF_SYSTEM_CORE_CLOCK/60/CYCLE_PER_FRAME) { // (60 x CYCLE_PER_FRAME) fps
-			chip8.periph.random_num = SysTick->CNT;
-			chip8.periph.key_held = chip8_keymap(adc_button_get_state());
-			chip8.periph.key_just_released = chip8_keymap(adc_button_get_just_released());
-			if(!(chip8.periph.requests & CHIP8_REQUEST_WAIT_DISPLAY_REFRESH)) {
-				chip8_step(&chip8);
-				buzzer_set_volume(chip8.periph.sound_timer > 0 ? buzzer_volume : 0);
-				if(chip8.periph.requests & CHIP8_REQUEST_AUDIO_BUFFER_UPDATED) {
-					buzzer_set_buffer(chip8.periph.audio);
-					chip8.periph.requests &= ~CHIP8_REQUEST_AUDIO_BUFFER_UPDATED;
+		switch(screen_state) {
+			case SCREEN_MENU:
+			{
+				int menu_offset_prev = menu_offset;
+				uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
+				if(button_press & (1<<0xF)) {
+					if(strlen(menu_file_list[menu_offset%MENU_PAGE_SIZE]) > 0 && menu_file_list[menu_offset%MENU_PAGE_SIZE][strlen(menu_file_list[menu_offset%MENU_PAGE_SIZE])-1] == '/') {
+						// Enter directory
+						size_t current_dir_length = strlen(menu_current_dir);
+						memcpy(&menu_current_dir[current_dir_length], menu_file_list[menu_offset%MENU_PAGE_SIZE], strlen(menu_file_list[menu_offset%MENU_PAGE_SIZE])+1); // TODO: this function's unsafe. Need boundry check.
+						menu_offset = 0;
+						menu_dir_reload_required = true;
+					} else {
+						// Load game
+						if(file_load_rom(menu_file_list[menu_offset%MENU_PAGE_SIZE], &chip8) == FR_OK) {
+							// Get rid of all button press events
+							adc_button_get_just_pressed();
+							adc_button_get_just_released();
+							// Start the game!
+							screen_state = SCREEN_GAMEPLAY;
+						} else {
+							 // TODO: error handling
+						}
+					}
+				} else if(button_press & (1<<0x10)) {
+					// Up a directory
+					if(strlen(menu_current_dir) >= 2) {
+						// Remove the trailing slash
+						menu_current_dir[strlen(menu_current_dir)-1] = '\0';
+						// Look for the next trailing slash, then make it \0 for upping a directory level
+						char *result = strrchr(menu_current_dir, '/');
+						if(result != NULL) {
+							result[1] = '\0';
+						} else {
+							menu_current_dir[0] = '\0';
+						}
+						menu_dir_reload_required = true;
+					}
+				} else {
+					if(button_press & (1<<2)) { menu_offset--; }
+					if(button_press & (1<<8)) { menu_offset++; }
+					if(button_press & (1<<4)) { menu_offset -= 10; }
+					if(button_press & (1<<6)) { menu_offset += 10; }
 				}
-				if(chip8.periph.requests & CHIP8_REQUEST_AUDIO_PITCH_UPDATED) {
-					buzzer_set_pitch(chip8.periph.audio_pitch);
-					chip8.periph.requests &= ~CHIP8_REQUEST_AUDIO_PITCH_UPDATED;
+
+				if(menu_offset < 0) {
+					menu_offset = 0;
+				}
+
+				if(menu_offset != menu_offset_prev) {
+					menu_display_update_required = true;
+				}
+
+				if(menu_dir_reload_required || menu_offset/MENU_PAGE_SIZE != menu_offset_prev/MENU_PAGE_SIZE) {
+					menu_file_count_of_current_page = MENU_PAGE_SIZE;
+					if(file_readdir(menu_current_dir, menu_offset/MENU_PAGE_SIZE*MENU_PAGE_SIZE, menu_file_list, &menu_file_count_of_current_page) == 0) {
+						menu_display_update_required = true;
+						menu_dir_reload_required = false;
+					}
+				}
+				if(menu_file_count_of_current_page < MENU_PAGE_SIZE-1 && menu_offset%10 > menu_file_count_of_current_page-1) {
+					menu_offset = menu_offset/MENU_PAGE_SIZE*MENU_PAGE_SIZE + menu_file_count_of_current_page-1;
+				}
+				if(menu_display_update_required) {
+					draw_clear(chip8.periph.display);
+					for(size_t i=0; i<menu_file_count_of_current_page; i++) {
+						draw_text(chip8.periph.display, menu_file_list[i], 6, 6*i);
+					}
+					draw_text(chip8.periph.display, ">", 0, 6*(menu_offset%10));
+					lcd_transfer_begin(chip8.periph.display);
+					menu_display_update_required = false;
 				}
 			}
 
-			if(chip8.periph.requests & CHIP8_REQUEST_HALT_MASK) {
-				while(true);
+			break;
+			case SCREEN_GAMEPLAY:
+			{
+				uint32_t systick_now = SysTick->CNT;
+				if(systick_now - last_frame_processed_tick >= FUNCONF_SYSTEM_CORE_CLOCK/60/CYCLE_PER_FRAME) { // (60 x CYCLE_PER_FRAME) fps
+					chip8.periph.random_num = SysTick->CNT;
+					chip8.periph.key_held = (uint16_t)chip8_keymap(adc_button_get_state());
+					chip8.periph.key_just_released = (uint16_t)chip8_keymap(adc_button_get_just_released());
+					if(!(chip8.periph.requests & CHIP8_REQUEST_WAIT_DISPLAY_REFRESH)) {
+						chip8_step(&chip8);
+						buzzer_set_volume(chip8.periph.sound_timer > 0 ? buzzer_volume : 0);
+						if(chip8.periph.requests & CHIP8_REQUEST_AUDIO_BUFFER_UPDATED) {
+							buzzer_set_buffer(chip8.periph.audio);
+							chip8.periph.requests &= ~CHIP8_REQUEST_AUDIO_BUFFER_UPDATED;
+						}
+						if(chip8.periph.requests & CHIP8_REQUEST_AUDIO_PITCH_UPDATED) {
+							buzzer_set_pitch(chip8.periph.audio_pitch);
+							chip8.periph.requests &= ~CHIP8_REQUEST_AUDIO_PITCH_UPDATED;
+						}
+					}
+
+					uint32_t button_just_pressed = chip8_keymap(adc_button_get_just_pressed());
+					if((button_just_pressed & (1<<0x10)) || chip8.periph.requests & CHIP8_REQUEST_HALT_MASK) {
+						menu_dir_reload_required = true;
+						screen_state = SCREEN_MENU;
+					}
+					last_frame_processed_tick = systick_now;
+				}
+
+				if(systick_now - last_lcd_blit_tick >= FUNCONF_SYSTEM_CORE_CLOCK/60) { // 60fps
+					chip8_timer_step(&chip8);
+					buzzer_set_volume(chip8.periph.sound_timer > 0 ? buzzer_volume : 0);
+					// There's no double-buffering to save 1kB of RAM.
+					// There still won't be tearing because the LCD's response time
+					// is slow enough to have any tearing visible
+					lcd_transfer_begin(chip8.periph.display);
+					last_lcd_blit_tick = systick_now;
+					chip8.periph.requests &= ~CHIP8_REQUEST_WAIT_DISPLAY_REFRESH;
+				}
 			}
-			last_frame_processed_tick = systick_now;
+			break;
 		}
 
-		if(systick_now - last_lcd_blit_tick >= FUNCONF_SYSTEM_CORE_CLOCK/60) { // 60fps
-			chip8_timer_step(&chip8);
-			buzzer_set_volume(chip8.periph.sound_timer > 0 ? buzzer_volume : 0);
-			// There's no double-buffering to save 1kB of RAM.
-			// There still won't be tearing because the LCD's response time
-			// is slow enough to have any tearing visible
-			lcd_transfer_begin(chip8.periph.display);
-			last_lcd_blit_tick = systick_now;
-			chip8.periph.requests &= ~CHIP8_REQUEST_WAIT_DISPLAY_REFRESH;
-		}
 
 		watchdog_feed();
 	}

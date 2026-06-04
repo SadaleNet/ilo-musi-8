@@ -29,12 +29,23 @@
 #include "lcd.h"
 #include "spi.h"
 #include "fatfs/ff.h"
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 
 static bool file_card_mode_enter(void) {
 	if(!spi_card_is_filesystem_mounted()) {
-		return false;
+		// If not mounted, give it a chance to mount right now!
+		if(adc_card_is_inserted()) {
+			while(lcd_is_transfer_in_progress()){}
+			spi_set_mode(SPI_MODE_MEMORY_CARD_SLOW);
+			spi_card_mount_filesystem();
+		}
+		if(!spi_card_is_filesystem_mounted()) {
+			return false;
+		}
 	}
-	
+
 	while(lcd_is_transfer_in_progress()){}
 	spi_set_mode(SPI_MODE_MEMORY_CARD);
 	return true;
@@ -117,16 +128,61 @@ FRESULT file_load_rom(const char *path, struct chip8_machine *chip8_machine) {
 		.quirks = (CHIP8_QUIRK_WRAP|CHIP8_QUIRK_LORES_WIDE_SPRITE|CHIP8_QUIRK_RESIZE_CLEAR_SCREEN)
 	};
 	chip8_init(chip8_machine, &chip8_cfg);
+
 	FIL fil;
 	FRESULT ret;
 	UINT bytesread;
 	ret = f_open(&fil, path, FA_READ);
-	if (ret == FR_OK) {
+	if(ret == FR_OK) {
 		ret = f_read(&fil, &chip8_machine->mem[CHIP8_PROGRAM_START_OFFSET], CHIP8_MEMORY_SIZE-CHIP8_PROGRAM_START_OFFSET, &bytesread);
 		f_close(&fil);
 	}
-	
+
 	file_card_mode_exit();
 	return ret;
 }
 
+FRESULT file_readdir(const char *path, size_t offset, char (*filelist)[14], size_t *count) {
+	if(!file_card_mode_enter()) {
+		return FR_NOT_READY;
+	}
+
+	size_t listed_file_count = 0;
+	size_t required_count = *count;
+	size_t fulfilled_count = 0;
+	DIR dir;
+	FRESULT ret;
+    FILINFO fileinfo;
+    ret = f_opendir(&dir, path);
+    if(ret == FR_OK) {
+		while(true) {
+			ret = f_readdir(&dir, &fileinfo);
+			if(ret != FR_OK) { // Error detected!
+				break;
+			}
+			if(fileinfo.fname[0] == '\0') { // End of directory
+				break;
+			}
+			if(listed_file_count >= offset) {
+				memcpy(filelist[fulfilled_count], fileinfo.fname, sizeof(fileinfo.fname));
+				// For directory, attach slash to the end of the filename
+				if(fileinfo.fattrib & AM_DIR) {
+					// Max length of 8.3 filename is 8+1+3 = 12
+					size_t endpos = strlen(filelist[fulfilled_count]);
+					filelist[fulfilled_count][endpos] = '/';
+					filelist[fulfilled_count][endpos+1] = '\0';
+				}
+				fulfilled_count++;
+			}
+			listed_file_count++;
+			if(fulfilled_count >= required_count) { // Enough entries got read
+				break;
+			}
+		}
+		f_closedir(&dir);
+	}
+	*count = fulfilled_count;
+
+	file_card_mode_exit();
+	return ret;
+}
