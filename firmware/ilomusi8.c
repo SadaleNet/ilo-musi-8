@@ -40,13 +40,14 @@
 #include <stdio.h>
 #include <string.h>
 
-#define CYCLE_PER_FRAME (200) // Benchmark without buzzer: 8100fps max, which's 135 cycles per frame
+#define CYCLE_PER_FRAME (99) // Benchmark: 5500fps max, which's 90 cycles per frame
 
 #define CHIP8_QUIRK_PLATFORM_VIP (CHIP8_QUIRK_VBLANK|CHIP8_QUIRK_LOGIC)
 #define CHIP8_QUIRK_PLATFORM_SCHIP (CHIP8_QUIRK_SHIFT|CHIP8_QUIRK_MEMORY_LEAVE_I_UNCHANGED|CHIP8_QUIRK_JUMP|CHIP8_QUIRK_HIRES_COLLISION)
 #define CHIP8_QUIRK_PLATFORM_XOCHIP (CHIP8_QUIRK_WRAP|CHIP8_QUIRK_LORES_WIDE_SPRITE|CHIP8_QUIRK_RESIZE_CLEAR_SCREEN)
 
 enum {
+	SCREEN_ERROR,
 	SCREEN_MENU,
 	SCREEN_GAMEPLAY,
 } screen_state;
@@ -69,6 +70,21 @@ static uint32_t chip8_keymap(uint32_t button_state) {
 		}
 	}
 	return ret;
+}
+
+static void directory_attach_filename(char *directory_str, const char *filename) {
+	size_t current_dir_length = strlen(directory_str);
+	// TODO: this function's unsafe. Need boundry check.
+	memcpy(&directory_str[current_dir_length], filename, strlen(filename)+1);
+}
+
+static void directory_remove_filename(char *directory_str) {
+	char *result = strrchr(directory_str, '/');
+	if(result != NULL) {
+		result[1] = '\0'; // Remove filename. Keep trailing slash.
+	} else {
+		directory_str[0] = '\0';
+	}
 }
 
 int main() {
@@ -98,7 +114,7 @@ int main() {
 	screen_state = SCREEN_MENU;
 
 	uint8_t buzzer_volume = 3; // Just make up a value for testing
-	buzzer_set_volume(0);
+	buzzer_set_volume(buzzer_volume);
 	buzzer_set_buffer(chip8.periph.audio);
 	buzzer_set_pitch(chip8.periph.audio_pitch);
 
@@ -108,9 +124,11 @@ int main() {
 	static char menu_file_list[MENU_PAGE_SIZE][14];
 	char menu_current_dir[256] = {0};
 	int menu_offset = 0;
+	FRESULT file_io_result = FR_OK;
 	size_t menu_file_count_of_current_page = 0;
 	bool menu_dir_reload_required = true;
 	bool menu_display_update_required = true;
+	bool error_screen_rendered = false;
 
 	uint32_t last_frame_processed_tick = SysTick->CNT;
 	uint32_t last_lcd_blit_tick = SysTick->CNT;
@@ -118,15 +136,48 @@ int main() {
 		file_loop();
 
 		switch(screen_state) {
+			case SCREEN_ERROR:
+			{
+				if(!error_screen_rendered) {
+					while(lcd_is_transfer_in_progress()){}
+					draw_clear(chip8.periph.display);
+					draw_text(chip8.periph.display, "XXXXXXXXXXXXXXXXXXXXX", 0, 0);
+					draw_text(chip8.periph.display, "XXXXXXXXXXXXXXXXXXXXX", 0, 58);
+					draw_text(chip8.periph.display, "CARD ERROR #", 0, 20);
+					char errorcode[3] = {0};
+					errorcode[0] = file_io_result/10 + '0';
+					errorcode[1] = file_io_result%10 + '0';
+					errorcode[2] = '\0';
+					draw_text(chip8.periph.display, errorcode, 6*12, 20);
+					switch(file_io_result) {
+						case FR_NOT_READY:
+							draw_text(chip8.periph.display, "NO CARD", 0, 30);
+						break;
+						case FR_NO_FILESYSTEM:
+							draw_text(chip8.periph.display, "FILESYSTEM ERROR", 0, 30);
+							draw_text(chip8.periph.display, "REQUIRES FAT16/FAT32", 0, 40);
+						break;
+						default:
+						break;
+					}
+					lcd_transfer_begin(chip8.periph.display);
+				}
+				if(chip8_keymap(adc_button_get_just_pressed())) {
+					menu_current_dir[0] = '\0';
+					menu_offset = 0;
+					menu_dir_reload_required = true;
+					screen_state = SCREEN_MENU;
+				}
+			}
+			break;
 			case SCREEN_MENU:
 			{
 				int menu_offset_prev = menu_offset;
 				uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
-				if(button_press & (1<<0xF)) {
+				if(button_press & (1<<0xF)) { // The F button
 					size_t menu_offset_on_current_page = menu_offset%MENU_PAGE_SIZE;
 					// Attach the filename to the current menu_current_dir
-					size_t current_dir_length = strlen(menu_current_dir);
-					memcpy(&menu_current_dir[current_dir_length], menu_file_list[menu_offset_on_current_page], strlen(menu_file_list[menu_offset_on_current_page])+1); // TODO: this function's unsafe. Need boundry check.
+					directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
 
 					if(strlen(menu_file_list[menu_offset_on_current_page]) > 0 && menu_file_list[menu_offset_on_current_page][strlen(menu_file_list[menu_offset_on_current_page])-1] == '/') {
 						// Enter the directory
@@ -134,36 +185,25 @@ int main() {
 						menu_dir_reload_required = true;
 					} else {
 						// Load game
-						FRESULT game_loaded = file_load_rom(menu_current_dir, &chip8);
-
-						char *result = strrchr(menu_current_dir, '/');
-						if(result != NULL) {
-							result[1] = '\0'; // Remove filename. Keep trailing slash.
-						} else {
-							menu_current_dir[0] = '\0';
-						}
-						if(game_loaded == FR_OK) {
+						file_io_result = file_load_rom(menu_current_dir, &chip8);
+						directory_remove_filename(menu_current_dir);
+						if(file_io_result == FR_OK) {
 							// Get rid of all button press events
 							adc_button_get_just_pressed();
 							adc_button_get_just_released();
 							// Start the game!
 							screen_state = SCREEN_GAMEPLAY;
 						} else {
-							 // TODO: error handling
+							 // Do nothing. Just wait for error handling for file_io_result != FR_OK
 						}
 					}
-				} else if(button_press & (1<<0x10)) {
+				} else if(button_press & (1<<0x10)) { // The X button
 					// Up a directory
 					if(strlen(menu_current_dir) >= 2) {
 						// Remove the trailing slash
 						menu_current_dir[strlen(menu_current_dir)-1] = '\0';
 						// Look for the next trailing slash, then make it \0 for upping a directory level
-						char *result = strrchr(menu_current_dir, '/');
-						if(result != NULL) {
-							result[1] = '\0';
-						} else {
-							menu_current_dir[0] = '\0';
-						}
+						directory_remove_filename(menu_current_dir);
 						menu_offset = 0;
 						menu_dir_reload_required = true;
 					}
@@ -183,12 +223,14 @@ int main() {
 				}
 
 				if(menu_dir_reload_required || menu_offset/MENU_PAGE_SIZE != menu_offset_prev/MENU_PAGE_SIZE) {
+					while(lcd_is_transfer_in_progress()){}
 					draw_clear(chip8.periph.display);
 					lcd_transfer_begin(chip8.periph.display);
 
 					for(size_t i=0; i<2; i++) {
 						menu_file_count_of_current_page = MENU_PAGE_SIZE;
-						if(file_readdir(menu_current_dir, menu_offset/MENU_PAGE_SIZE*MENU_PAGE_SIZE, menu_file_list, &menu_file_count_of_current_page) == FR_OK) {
+						file_io_result = file_readdir(menu_current_dir, menu_offset/MENU_PAGE_SIZE*MENU_PAGE_SIZE, menu_file_list, &menu_file_count_of_current_page);
+						if(file_io_result == FR_OK) {
 							if(menu_file_count_of_current_page == 0) {
 								// The new page's empty. It happens when we reached the end of the directory
 								// Let's select the last entry of the previous page
@@ -198,17 +240,28 @@ int main() {
 							menu_display_update_required = true;
 							menu_dir_reload_required = false;
 							break;
+						} else {
+							break; // Skip to error handling mechanism
 						}
 					}
-					// Get rid of all button press events
+					// Get rid of all button press events after long operation
 					adc_button_get_just_pressed();
+				}
+
+				if(file_io_result != FR_OK) {
+					error_screen_rendered = false;
+					screen_state = SCREEN_ERROR;
+					break;
 				}
 
 				// Prevent selection of empty entries
 				if(menu_offset%MENU_PAGE_SIZE > menu_file_count_of_current_page-1) {
 					menu_offset = menu_offset/MENU_PAGE_SIZE*MENU_PAGE_SIZE + menu_file_count_of_current_page-1;
 				}
+
+				// Render the menu
 				if(menu_display_update_required) {
+					while(lcd_is_transfer_in_progress()){}
 					draw_clear(chip8.periph.display);
 					for(size_t i=0; i<menu_file_count_of_current_page; i++) {
 						draw_text(chip8.periph.display, menu_file_list[i], 6, 6*i);
