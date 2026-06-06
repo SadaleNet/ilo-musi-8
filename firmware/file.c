@@ -33,15 +33,22 @@
 #include <stdint.h>
 #include <string.h>
 
+static FATFS filesystem;
+static FRESULT mount_result;
+
+static FRESULT mount_filesystem(void) {
+	return f_mount(&filesystem, "", 1);
+}
+
 static bool file_card_mode_enter(void) {
-	if(!spi_card_is_filesystem_mounted()) {
+	if(mount_result != FR_OK) {
 		// If not mounted, give it a chance to mount right now!
 		if(adc_card_is_inserted()) {
 			while(lcd_is_transfer_in_progress()){}
 			spi_set_mode(SPI_MODE_MEMORY_CARD_SLOW);
-			spi_card_mount_filesystem();
+			mount_result = mount_filesystem();
 		}
-		if(!spi_card_is_filesystem_mounted()) {
+		if(mount_result != FR_OK) {
 			return false;
 		}
 	}
@@ -56,10 +63,11 @@ static void file_card_mode_exit(void) {
 }
 
 void file_first_mount(void) {
+	mount_result = FR_NOT_READY;
 	if(adc_card_has_insert_event()) {
 		// Must be the first SPI operation to run
 		// spi_set_mode(SPI_MODE_MEMORY_CARD_SLOW); // No need. That's because it's same as the initial state
-		spi_card_mount_filesystem();
+		mount_result = mount_filesystem();
 		adc_card_reset_insert_event();
 	}
 }
@@ -69,12 +77,12 @@ void file_loop(void) {
 	// In practice, if LCD SPI communicaition is on-going, it won't stop until the row's sent
 	// so there might be a bit of delay of SPI initialization for the card
 	if(adc_card_is_just_removed()) {
-		spi_card_reset_mounted_state();
+		mount_result = FR_NOT_READY;
 	}
 	if(adc_card_has_insert_event()) {
 		while(lcd_is_transfer_in_progress()){}
 		spi_set_mode(SPI_MODE_MEMORY_CARD_SLOW);
-		spi_card_mount_filesystem();
+		mount_result = mount_filesystem();
 		spi_set_mode(SPI_MODE_LCD);
 		adc_card_reset_insert_event();
 	}
@@ -82,7 +90,7 @@ void file_loop(void) {
 
 FRESULT file_load_rom(const char *path, struct chip8_machine *chip8_machine) {
 	if(!file_card_mode_enter()) {
-		return FR_NOT_READY;
+		return mount_result;
 	}
 	
 	static const struct chip8_config chip8_cfg = {
@@ -144,7 +152,7 @@ FRESULT file_load_rom(const char *path, struct chip8_machine *chip8_machine) {
 
 FRESULT file_readdir(const char *path, size_t offset, char (*filelist)[14], size_t *count) {
 	if(!file_card_mode_enter()) {
-		return FR_NOT_READY;
+		return mount_result;
 	}
 
 	size_t listed_file_count = 0;

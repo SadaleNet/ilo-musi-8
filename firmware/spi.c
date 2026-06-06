@@ -30,9 +30,6 @@
 
 #include "ch32fun.h"
 
-static FATFS filesystem;
-static bool filesystem_mounted;
-
 void spi_init(void) {
 	// This module owns the following pins: CARD_CS, SCK, MOSI, MISO
 	// Keep in mind that, in particular, LCD_CS is owned by the lcd module, and that
@@ -114,19 +111,4 @@ void spi_set_mode(enum spi_mode mode) {
 			}
 		break;
 	}
-}
-
-FRESULT spi_card_mount_filesystem(void) {
-	FRESULT ret;
-	ret = f_mount(&filesystem, "", 1);
-	filesystem_mounted = (ret == FR_OK);
-	return ret;
-}
-
-bool spi_card_is_filesystem_mounted(void) {
-	return filesystem_mounted;
-}
-
-void spi_card_reset_mounted_state(void) {
-	filesystem_mounted = false;
 }

@@ -27,8 +27,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "fatfs/ff.h"
-
 // The SPI mode would be set to SPI_MODE_MEMORY_CARD or SPI_MODE_MEMORY_CARD_SLOW by the FATFS module,
 // and would be set back to SPI_MODE_LCD after completion of the FATFS operation.
 // The userspace code can always assume the mode is SPI_MODE_LCD.
@@ -41,6 +39,3 @@ enum spi_mode {
 void spi_init(void);
 void spi_send_byte(uint8_t data);
 void spi_set_mode(enum spi_mode mode);
-FRESULT spi_card_mount_filesystem(void);
-bool spi_card_is_filesystem_mounted(void);
-void spi_card_reset_mounted_state(void); // call when card removal's been detected
