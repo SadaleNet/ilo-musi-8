@@ -123,15 +123,26 @@ int main() {
 				int menu_offset_prev = menu_offset;
 				uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
 				if(button_press & (1<<0xF)) {
-					if(strlen(menu_file_list[menu_offset%MENU_PAGE_SIZE]) > 0 && menu_file_list[menu_offset%MENU_PAGE_SIZE][strlen(menu_file_list[menu_offset%MENU_PAGE_SIZE])-1] == '/') {
-						// Enter directory
-						size_t current_dir_length = strlen(menu_current_dir);
-						memcpy(&menu_current_dir[current_dir_length], menu_file_list[menu_offset%MENU_PAGE_SIZE], strlen(menu_file_list[menu_offset%MENU_PAGE_SIZE])+1); // TODO: this function's unsafe. Need boundry check.
+					size_t menu_offset_on_current_page = menu_offset%MENU_PAGE_SIZE;
+					// Attach the filename to the current menu_current_dir
+					size_t current_dir_length = strlen(menu_current_dir);
+					memcpy(&menu_current_dir[current_dir_length], menu_file_list[menu_offset_on_current_page], strlen(menu_file_list[menu_offset_on_current_page])+1); // TODO: this function's unsafe. Need boundry check.
+
+					if(strlen(menu_file_list[menu_offset_on_current_page]) > 0 && menu_file_list[menu_offset_on_current_page][strlen(menu_file_list[menu_offset_on_current_page])-1] == '/') {
+						// Enter the directory
 						menu_offset = 0;
 						menu_dir_reload_required = true;
 					} else {
 						// Load game
-						if(file_load_rom(menu_file_list[menu_offset%MENU_PAGE_SIZE], &chip8) == FR_OK) {
+						FRESULT game_loaded = file_load_rom(menu_current_dir, &chip8);
+
+						char *result = strrchr(menu_current_dir, '/');
+						if(result != NULL) {
+							result[1] = '\0'; // Remove filename. Keep trailing slash.
+						} else {
+							menu_current_dir[0] = '\0';
+						}
+						if(game_loaded == FR_OK) {
 							// Get rid of all button press events
 							adc_button_get_just_pressed();
 							adc_button_get_just_released();
@@ -153,6 +164,7 @@ int main() {
 						} else {
 							menu_current_dir[0] = '\0';
 						}
+						menu_offset = 0;
 						menu_dir_reload_required = true;
 					}
 				} else {
@@ -171,13 +183,29 @@ int main() {
 				}
 
 				if(menu_dir_reload_required || menu_offset/MENU_PAGE_SIZE != menu_offset_prev/MENU_PAGE_SIZE) {
-					menu_file_count_of_current_page = MENU_PAGE_SIZE;
-					if(file_readdir(menu_current_dir, menu_offset/MENU_PAGE_SIZE*MENU_PAGE_SIZE, menu_file_list, &menu_file_count_of_current_page) == 0) {
-						menu_display_update_required = true;
-						menu_dir_reload_required = false;
+					draw_clear(chip8.periph.display);
+					lcd_transfer_begin(chip8.periph.display);
+
+					for(size_t i=0; i<2; i++) {
+						menu_file_count_of_current_page = MENU_PAGE_SIZE;
+						if(file_readdir(menu_current_dir, menu_offset/MENU_PAGE_SIZE*MENU_PAGE_SIZE, menu_file_list, &menu_file_count_of_current_page) == FR_OK) {
+							if(menu_file_count_of_current_page == 0) {
+								// The new page's empty. It happens when we reached the end of the directory
+								// Let's select the last entry of the previous page
+								menu_offset = (menu_offset/MENU_PAGE_SIZE-1)*MENU_PAGE_SIZE +MENU_PAGE_SIZE-1;
+								continue;
+							}
+							menu_display_update_required = true;
+							menu_dir_reload_required = false;
+							break;
+						}
 					}
+					// Get rid of all button press events
+					adc_button_get_just_pressed();
 				}
-				if(menu_file_count_of_current_page < MENU_PAGE_SIZE-1 && menu_offset%10 > menu_file_count_of_current_page-1) {
+
+				// Prevent selection of empty entries
+				if(menu_offset%MENU_PAGE_SIZE > menu_file_count_of_current_page-1) {
 					menu_offset = menu_offset/MENU_PAGE_SIZE*MENU_PAGE_SIZE + menu_file_count_of_current_page-1;
 				}
 				if(menu_display_update_required) {
@@ -185,7 +213,7 @@ int main() {
 					for(size_t i=0; i<menu_file_count_of_current_page; i++) {
 						draw_text(chip8.periph.display, menu_file_list[i], 6, 6*i);
 					}
-					draw_text(chip8.periph.display, ">", 0, 6*(menu_offset%10));
+					draw_text(chip8.periph.display, ">", 0, 6*(menu_offset%MENU_PAGE_SIZE));
 					lcd_transfer_begin(chip8.periph.display);
 					menu_display_update_required = false;
 				}
