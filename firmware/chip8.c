@@ -483,13 +483,7 @@ void chip8_step(struct chip8_machine *machine) {
 			switch(instruction & 0x00FF) {
 				case 0x0002: // F002 XO-Chip
 					CHIP8_HALT(*i+CHIP8_AUDIO_BUFFER_SIZE-1 >= CHIP8_MEMORY_SIZE, CHIP8_REQUEST_HALT_I_ERROR);
-					// Converts big-endian mem into 32bit little-endian and store it into periph->audio
-					for(size_t n=0; n<CHIP8_AUDIO_BUFFER_SIZE/4; n++) {
-						periph->audio[n] = (mem[(*i) + n*4 + 0] << 24) |
-											(mem[(*i) + n*4 + 1] << 16) |
-											(mem[(*i) + n*4 + 2] << 8) |
-											(mem[(*i) + n*4 + 3] << 0);
-					}
+					memcpy(periph->audio, &mem[(*i)], CHIP8_AUDIO_BUFFER_SIZE);
 					periph->requests |= CHIP8_REQUEST_AUDIO_BUFFER_UPDATED;
 				break;
 				case 0x0007: // FX07
