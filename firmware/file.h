@@ -31,7 +31,8 @@
 
 void file_first_mount(void); // Process card insertion/removal events. Can be called after adc_is_reading_ready()
 void file_loop(void); // Process card insertion/removal events
-FRESULT file_load_rom(const char *path, struct chip8_machine *chip8_machine);
+FRESULT file_load_config(const char *path, struct chip8_config *chip8_cfg);
+FRESULT file_load_rom(const char *path, const struct chip8_config *chip8_cfg, struct chip8_machine *chip8_machine);
 // void file_save_cfg(TBC);
 void file_save_storageflag(uint8_t storage_flags[16]);
 FRESULT file_readdir(const char *path, size_t offset, char (*filelist)[14], size_t *count);

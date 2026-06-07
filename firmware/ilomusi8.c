@@ -47,12 +47,13 @@
 #define CHIP8_QUIRK_PLATFORM_XOCHIP (CHIP8_QUIRK_WRAP|CHIP8_QUIRK_LORES_WIDE_SPRITE|CHIP8_QUIRK_RESIZE_CLEAR_SCREEN)
 
 enum {
-	SCREEN_ERROR,
+	SCREEN_ERROR, // File IO Error Screen
 	SCREEN_MENU,
 	SCREEN_GAMEPLAY,
 } screen_state;
 
 static struct chip8_machine chip8;
+struct chip8_config chip8_cfg;
 
 static uint32_t chip8_keymap(uint32_t button_state) {
 	// Converts from the left layout to the right layout
@@ -113,10 +114,8 @@ int main() {
 
 	screen_state = SCREEN_MENU;
 
-	uint8_t buzzer_volume = 3; // Just make up a value for testing
+	uint8_t buzzer_volume = 15; // Just make up a value for testing
 	buzzer_set_volume(buzzer_volume);
-	buzzer_set_buffer(chip8.periph.audio);
-	buzzer_set_pitch(chip8.periph.audio_pitch);
 
 	watchdog_feed();
 
@@ -130,11 +129,13 @@ int main() {
 	bool menu_display_update_required = true;
 	bool error_screen_rendered = false;
 
+	uint32_t game_min_cycle_interval = 0;
 	uint32_t last_frame_processed_tick = SysTick->CNT;
 	uint32_t last_lcd_blit_tick = SysTick->CNT;
 	while(1) {
 		file_loop();
 
+		uint32_t systick_now = SysTick->CNT;
 		switch(screen_state) {
 			case SCREEN_ERROR:
 			{
@@ -156,6 +157,9 @@ int main() {
 						case FR_NO_FILESYSTEM:
 							draw_text(chip8.periph.display, "FILESYSTEM ERROR", 0, 30);
 							draw_text(chip8.periph.display, "REQUIRES FAT16/FAT32", 0, 40);
+						break;
+						case FR_INVALID_PARAMETER:
+							draw_text(chip8.periph.display, "INVALID GAME CONFIG", 0, 30);
 						break;
 						default:
 						break;
@@ -184,13 +188,32 @@ int main() {
 						menu_offset = 0;
 						menu_dir_reload_required = true;
 					} else {
+						// Load INI config
+						memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "INI", 3); // replace file extension to .INI
+						file_io_result = file_load_config(menu_current_dir, &chip8_cfg);
+						printf("file_load_config: %u %u\n", file_io_result, chip8_cfg.speed);
+						printf("font: "); for(size_t i=0; i<sizeof(chip8_cfg.font); i++) { printf("%02X", chip8_cfg.font[i]); } printf("\n");
+						printf("font_highres: "); for(size_t i=0; i<sizeof(chip8_cfg.font_highres); i++) { printf("%02X", chip8_cfg.font_highres[i]); } printf("\n");
+						printf("audio: "); for(size_t i=0; i<sizeof(chip8_cfg.audio); i++) { printf("%02X", chip8_cfg.audio[i]); } printf("\n");
+						printf("storage_flags: "); for(size_t i=0; i<sizeof(chip8_cfg.storage_flags); i++) { printf("%02X", chip8_cfg.storage_flags[i]); } printf("\n");
+						printf("quirks: %08lX\n", chip8_cfg.quirks);
+						printf("speed: %u\n", chip8_cfg.speed);
+						printf("input_navigation: "); for(size_t i=0; i<16; i++) { if(chip8_cfg.input_navigation & (1<<i)) printf("%X", i); } printf("\n");
+						printf("input_action: "); for(size_t i=0; i<16; i++) { if(chip8_cfg.input_action & (1<<i)) printf("%X", i); } printf("\n");
+						printf("\n");
+
 						// Load game
-						file_io_result = file_load_rom(menu_current_dir, &chip8);
+						memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "CH8", 3); // resume file extension of .CH8
+						file_io_result = file_load_rom(menu_current_dir, &chip8_cfg, &chip8);
 						directory_remove_filename(menu_current_dir);
 						if(file_io_result == FR_OK) {
 							// Get rid of all button press events
 							adc_button_get_just_pressed();
 							adc_button_get_just_released();
+							// Initialize peripheral variables
+							buzzer_set_buffer(chip8.periph.audio);
+							buzzer_set_pitch(chip8.periph.audio_pitch);
+							game_min_cycle_interval = FUNCONF_SYSTEM_CORE_CLOCK/60/chip8_cfg.speed;
 							// Start the game!
 							screen_state = SCREEN_GAMEPLAY;
 						} else {
@@ -275,8 +298,7 @@ int main() {
 			break;
 			case SCREEN_GAMEPLAY:
 			{
-				uint32_t systick_now = SysTick->CNT;
-				if(systick_now - last_frame_processed_tick >= FUNCONF_SYSTEM_CORE_CLOCK/60/CYCLE_PER_FRAME) { // (60 x CYCLE_PER_FRAME) fps
+				if(systick_now - last_frame_processed_tick >= game_min_cycle_interval) { // (60 x CYCLE_PER_FRAME) fps
 					chip8.periph.random_num = SysTick->CNT;
 					chip8.periph.key_held = (uint16_t)chip8_keymap(adc_button_get_state());
 					chip8.periph.key_just_released = (uint16_t)chip8_keymap(adc_button_get_just_released());
@@ -296,7 +318,9 @@ int main() {
 					uint32_t button_just_pressed = chip8_keymap(adc_button_get_just_pressed());
 					if((button_just_pressed & (1<<0x10)) || chip8.periph.requests & CHIP8_REQUEST_HALT_MASK) {
 						menu_dir_reload_required = true;
+						buzzer_set_volume(0);
 						screen_state = SCREEN_MENU;
+						break;
 					}
 					last_frame_processed_tick = systick_now;
 				}

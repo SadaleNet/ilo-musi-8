@@ -68,6 +68,13 @@ struct chip8_cpu {
 #define CHIP8_REQUEST_HALT_INVALID_INSTRUCTION (1U << 28) //Invalid instruction
 #define CHIP8_REQUEST_HALT_MASK (0xFF000000)
 
+enum chip8_input_layout {
+	CHIP8_LAYOUT_STANDARD,
+	CHIP8_LAYOUT_QWERTY,
+	CHIP8_LAYOUT_COUNT,
+};
+
+
 struct chip8_periph {
 	uint8_t delay_timer;
 	uint8_t sound_timer;
@@ -76,6 +83,7 @@ struct chip8_periph {
 	uint8_t high_res;
 	uint8_t random_num;
 	uint8_t audio_pitch; // sample rate: 4000*(2**((audio_pitch-64)/48)) Hz
+	uint8_t speed; // Max execution speed in cycle per frame. fps is always 60Hz.
 	uint32_t requests;
 	uint8_t audio[CHIP8_AUDIO_BUFFER_SIZE];
 	uint8_t display[CHIP8_DISPLAY_HEIGHT*CHIP8_DISPLAY_WIDTH/8]; // column-major, first column is leftmost. Each column is 64bit, the top bit is LSB.
@@ -90,10 +98,14 @@ struct chip8_machine {
 
 struct chip8_config {
 	uint8_t font[16*5];
-	uint8_t font_highres[32*5];
-	uint32_t audio[CHIP8_AUDIO_BUFFER_SIZE/4];
+	uint8_t font_highres[16*10];
+	uint8_t audio[CHIP8_AUDIO_BUFFER_SIZE];
 	uint8_t storage_flags[16];
 	uint32_t quirks;
+	uint8_t speed; // Unit: cycle per frame. fps is always 60 Hz.
+	uint8_t input_layout; // Datatype: enum chip8_input_layout. The keyboard layout. For documentation use. No actual function.
+	uint16_t input_navigation; // Buttons for navigation. For documentation use. No actual function.
+	uint16_t input_action; // Buttons for control. For documentation use. No actual function.
 };
 
 void chip8_step(struct chip8_machine *machine);
