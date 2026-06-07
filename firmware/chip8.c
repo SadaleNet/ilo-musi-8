@@ -517,18 +517,10 @@ void chip8_step(struct chip8_machine *machine) {
 					*i += *vx;
 				break;
 				case 0x0029: // FX29
-					if(*vx > 0xF) {
-						*i = 16 * 5;
-					} else {
-						*i = *vx * 5;
-					}
+					*i = (*vx & 0x0F) * 5;
 				break;
 				case 0x0030: // FX30 Superchip
-					if(*vx > 0xF) {
-						*i = (16 * 5) + (16 * 10);
-					} else {
-						*i = (16 * 5) + (*vx * 10);
-					}
+					*i = (16 * 5) + ((*vx & 0x0F) * 10);
 				break;
 				case 0x0033: // FX33
 					CHIP8_HALT(*i+2 >= CHIP8_MEMORY_SIZE, CHIP8_REQUEST_HALT_I_ERROR);
