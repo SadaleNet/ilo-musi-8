@@ -74,7 +74,7 @@ static const struct chip8_config CHIP8_CFG_DEFAULT = {
 	.audio = {0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC},
 	.storage_flags = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
 	.quirks = (CHIP8_QUIRK_WRAP|CHIP8_QUIRK_LORES_WIDE_SPRITE|CHIP8_QUIRK_RESIZE_CLEAR_SCREEN),
-	.speed = 99,
+	.speed = 0,
 	.input_layout = 0,
 	.input_navigation = 0,
 	.input_action = 0,
@@ -349,14 +349,30 @@ FRESULT file_load_config(const char *path, struct chip8_config *chip8_cfg) {
 
 	if(ret == FR_OK) {
 		// Validation of parsed content
-		if(chip8_cfg->speed == 0 ||
-			chip8_cfg->speed > 99 ||
+		if(chip8_cfg->speed > 99 ||
 			chip8_cfg->input_layout >= CHIP8_LAYOUT_COUNT) {
 			ret = FR_INVALID_PARAMETER; // Parsing validation error!
 		}
 	}
-	
+
 	// TODO: also load chip8_cfg->storage_flags here if such a file exists.
+	file_card_mode_exit();
+	return ret;
+}
+
+FRESULT file_save_config(const char *path, const struct chip8_config *chip8_cfg) {
+	if(!file_card_mode_enter()) {
+		return mount_result;
+	}
+
+	FIL fil;
+	FRESULT ret;
+	ret = f_open(&fil, path, FA_READ);
+	if(ret == FR_OK) {
+		// TODO: Unimplemented!
+		// ret = f_write(&fil, buffer, sizeof(buffer), &byteswritten); if(ret != FR_OK){ break; }
+		f_close(&fil);
+	}
 
 	file_card_mode_exit();
 	return ret;
