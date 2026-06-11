@@ -25,13 +25,17 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include "chip8.h"
+#include "bulkmem.h"
 #include "adc.h"
+#include "file.h"
 #include "lcd.h"
 #include "spi.h"
 #include "fatfs/ff.h"
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
+#include <assert.h>
 
 static const struct chip8_config CHIP8_CFG_DEFAULT = {
 	.font = {
@@ -323,7 +327,9 @@ FRESULT file_load_config(const char *path, struct chip8_config *chip8_cfg) {
 	FIL fil;
 	FRESULT ret;
 	UINT bytesread;
-	static char buffer[128];
+	char *buffer = (char*)bulkmem->file_buffer;
+	size_t buffer_size = sizeof(bulkmem->file_buffer);
+
 	struct ini_parser ini_parser;
 	memset(&ini_parser, 0, sizeof(ini_parser));
 	ini_parser.output_cfg = chip8_cfg;
@@ -332,15 +338,15 @@ FRESULT file_load_config(const char *path, struct chip8_config *chip8_cfg) {
 	ret = f_open(&fil, path, FA_READ);
 	if(ret == FR_OK) {
 		while(true) {
-			ret = f_read(&fil, buffer, sizeof(buffer), &bytesread);
+			ret = f_read(&fil, buffer, buffer_size, &bytesread);
 			if(ret != FR_OK) { // Error condition
 				break;
 			}
 			if(!file_parse_ini(&ini_parser, buffer, bytesread)) {
-				ret = FR_INVALID_PARAMETER; // Borrowing the enum for INI parsing error
+				ret = FR_INI_PARSE_ERROR; // Borrowing the enum for INI parsing error
 				break;
 			}
-			if(bytesread < sizeof(buffer)) { // EOF condition
+			if(bytesread < buffer_size) { // EOF condition
 				break;
 			}
 		}
@@ -351,12 +357,36 @@ FRESULT file_load_config(const char *path, struct chip8_config *chip8_cfg) {
 		// Validation of parsed content
 		if(chip8_cfg->speed > 99 ||
 			chip8_cfg->input_layout >= CHIP8_LAYOUT_COUNT) {
-			ret = FR_INVALID_PARAMETER; // Parsing validation error!
+			ret = FR_INI_PARSE_ERROR; // Parsing validation error!
 		}
 	}
 
 	// TODO: also load chip8_cfg->storage_flags here if such a file exists.
 	file_card_mode_exit();
+	return ret;
+}
+
+int file_print_hex_buffer(char *dest, const uint8_t *buffer, size_t buffer_size) {
+	int ret = 0;
+	for(size_t i=0; i<buffer_size; i++) {
+		ret += sprintf(&dest[ret], "%02X", buffer[i]);
+	}
+	dest[ret] = '\0';
+	return ret;
+}
+
+int file_print_button_buffer(char *dest, uint16_t buttons) {
+	int ret = 0;
+	for(size_t i=0; i<16; i++) {
+		if(buttons & (1<<i)) {
+			if(i < 10) {
+				dest[ret++] = i + '0';
+			} else {
+				dest[ret++] = i - 10 + 'A';
+			}
+		}
+	}
+	dest[ret] = '\0';
 	return ret;
 }
 
@@ -367,10 +397,58 @@ FRESULT file_save_config(const char *path, const struct chip8_config *chip8_cfg)
 
 	FIL fil;
 	FRESULT ret;
-	ret = f_open(&fil, path, FA_READ);
+	ret = f_open(&fil, path, FA_WRITE|FA_CREATE_ALWAYS);
 	if(ret == FR_OK) {
-		// TODO: Unimplemented!
-		// ret = f_write(&fil, buffer, sizeof(buffer), &byteswritten); if(ret != FR_OK){ break; }
+		do {
+			// Assumption 1: sprintf() wouldn't return negative value because there shouldn't be any encoding error
+			// Assumption 2: The buffer always has enough space for storing the entire string
+			assert(sizeof(bulkmem->file_buffer) >= 512);
+			size_t index = 0;
+			if(chip8_cfg->quirks != CHIP8_CFG_DEFAULT.quirks) {
+				index += sprintf(&bulkmem->file_buffer[index], "quirks = %08lX\n", chip8_cfg->quirks);
+			}
+			if(chip8_cfg->speed != CHIP8_CFG_DEFAULT.speed) {
+				index += sprintf(&bulkmem->file_buffer[index], "speed = %u\n", chip8_cfg->speed);
+			}
+			if(memcmp(chip8_cfg->audio, CHIP8_CFG_DEFAULT.audio, sizeof(chip8_cfg->audio))) {
+				index += sprintf(&bulkmem->file_buffer[index], "audio = ");
+				index += file_print_hex_buffer(&bulkmem->file_buffer[index], chip8_cfg->audio, sizeof(chip8_cfg->audio));
+				index += sprintf(&bulkmem->file_buffer[index], "\n");
+			}
+			if(chip8_cfg->input_layout != CHIP8_CFG_DEFAULT.input_layout) {
+				index += sprintf(&bulkmem->file_buffer[index], "layout = %u\n", chip8_cfg->input_layout);
+			}
+			if(chip8_cfg->input_navigation != CHIP8_CFG_DEFAULT.input_navigation) {
+				index += sprintf(&bulkmem->file_buffer[index], "navigation = ");
+				index += file_print_button_buffer(&bulkmem->file_buffer[index], chip8_cfg->input_navigation);
+				index += sprintf(&bulkmem->file_buffer[index], "\n");
+			}
+			if(chip8_cfg->input_action != CHIP8_CFG_DEFAULT.input_action) {
+				index += sprintf(&bulkmem->file_buffer[index], "action = ");
+				index += file_print_button_buffer(&bulkmem->file_buffer[index], chip8_cfg->input_action);
+				index += sprintf(&bulkmem->file_buffer[index], "\n");
+			}
+			if(memcmp(chip8_cfg->font, CHIP8_CFG_DEFAULT.font, sizeof(chip8_cfg->font))) {
+				index += sprintf(&bulkmem->file_buffer[index], "font = ");
+				index += file_print_hex_buffer(&bulkmem->file_buffer[index], chip8_cfg->font, sizeof(chip8_cfg->font));
+				index += sprintf(&bulkmem->file_buffer[index], "\n");
+			}
+			UINT byteswritten;
+			ret = f_write(&fil, bulkmem->file_buffer, index, &byteswritten);
+			if(byteswritten != index) { ret = FR_VOLUME_FULL; }
+			if(ret != FR_OK) { break; }
+
+			// Need to split the f_write() into two blocks to fit the string into the 512 bytes buffer
+			index = 0;
+			if(memcmp(chip8_cfg->font_highres, CHIP8_CFG_DEFAULT.font_highres, sizeof(chip8_cfg->font_highres))) {
+				index += sprintf(&bulkmem->file_buffer[index], "font-large = ");
+				index += file_print_hex_buffer(&bulkmem->file_buffer[index], chip8_cfg->font_highres, sizeof(chip8_cfg->font_highres));
+				index += sprintf(&bulkmem->file_buffer[index], "\n");
+			}
+			ret = f_write(&fil, bulkmem->file_buffer, index, &byteswritten);
+			if(byteswritten != index) { ret = FR_VOLUME_FULL; }
+			if(ret != FR_OK) { break; }
+		} while(false);
 		f_close(&fil);
 	}
 

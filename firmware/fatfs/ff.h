@@ -310,7 +310,9 @@ typedef enum {
 	FR_LOCKED,				/* (16) The operation is rejected according to the file sharing policy */
 	FR_NOT_ENOUGH_CORE,		/* (17) LFN working buffer could not be allocated, given buffer size is insufficient or too deep path */
 	FR_TOO_MANY_OPEN_FILES,	/* (18) Number of open files > FF_FS_LOCK */
-	FR_INVALID_PARAMETER	/* (19) Given parameter is invalid */
+	FR_INVALID_PARAMETER,	/* (19) Given parameter is invalid */
+	FR_INI_PARSE_ERROR,		/* (20) [Added by Sadale] The INI config file has format error */
+	FR_VOLUME_FULL,			/* (21) [Added by Sadale] f_write() had indicated that the volume is full */
 } FRESULT;
 
 
