@@ -789,13 +789,78 @@ _____
 ''',
 }
 
+
+BITMAP_ICONS = {
+'NAVIGATION':
+'''
+__XXX__
+__X_X__
+XXXXXXX
+X_XXX_X
+XXXXXXX
+__X_X__
+__XXX__
+''',
+'GAMECONF':
+'''
+____XX_
+XXXXXXX
+____XX_
+_______
+_XX____
+XXXXXXX
+_XX____
+''',
+'GLOBALCONF':
+'''
+___X__X
+__XX_X_
+XXXX___
+XXXX_XX
+XXXX___
+__XX_X_
+___X__X
+''',
+'PLAY':
+'''
+__X____
+__XX___
+__XXX__
+__XXXX_
+__XXX__
+__XX___
+__X____
+''',
+'ACTION':
+'''
+__XXX__
+_XXXXX_
+XXXX_XX
+XXXXX_X
+XXXXXXX
+_XXXXX_
+__XXX__
+''',
+'UPDIR':
+'''
+__X____
+_XXX___
+X_X_X__
+__X____
+__X____
+__X____
+__XXXXX
+''',
+}
+
 def bitmap_to_bytes(bitmap):
-	lines = [i.replace('\n', '') for i in bitmap.split('\n')[1:]] # remove the first \n
+	lines = [i.replace('\n', '') for i in bitmap.split('\n')[1:][:-1]] # remove the first and the final \n
 	width = len(lines[0])
 	ret = [0 for i in range(width)]
+	assert(len(lines) < 8) # This function doesn't support image taller than 8px
 	# Column major. The top bit is LSB.
 	for c in range(width):
-		for r in range(5):
+		for r in range(len(lines)):
 			if lines[r][c] == 'X':
 				ret[c] |= (1 << r)
 	return bytes(ret)
@@ -803,6 +868,7 @@ def bitmap_to_bytes(bitmap):
 
 print("// This file was generated with font.py. Do not manually modify.")
 print("#include <stdint.h>")
+print("#include <stddef.h>")
 print("const uint8_t FONT_ASCII[0x5F][5] = {")
 for i in range(0x20, 0x7F):
 	c = chr(i)
@@ -810,5 +876,15 @@ for i in range(0x20, 0x7F):
 	for b in bitmap_to_bytes(BITMAP[c]):
 		print(f"0x{b:02X}, ", end='')
 	print(f"}}, // {c.replace('\\', '(backslash)')}")
-	
+
 print("};")
+print("")
+
+for k, v in BITMAP_ICONS.items():
+	bitmap = bitmap_to_bytes(v)
+	print(f"const uint8_t ICON_{k}[] = {{", end='')
+	for b in bitmap:
+		print(f"0x{b:02X}, ", end='')
+	print("};")
+	print(f"const size_t ICON_{k}_LENGTH = {len(bitmap)};")
+	pass

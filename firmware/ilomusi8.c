@@ -46,6 +46,20 @@
 #define CHIP8_QUIRK_PLATFORM_SCHIP (CHIP8_QUIRK_SHIFT|CHIP8_QUIRK_MEMORY_LEAVE_I_UNCHANGED|CHIP8_QUIRK_JUMP|CHIP8_QUIRK_HIRES_COLLISION)  // 0x00000413
 #define CHIP8_QUIRK_PLATFORM_OCTO (CHIP8_QUIRK_WRAP|CHIP8_QUIRK_LORES_WIDE_SPRITE|CHIP8_QUIRK_RESIZE_CLEAR_SCREEN) // 0x00000888
 
+extern const uint8_t ICON_NAVIGATION[];
+extern const size_t ICON_NAVIGATION_LENGTH;
+extern const uint8_t ICON_GAMECONF[];
+extern const size_t ICON_GAMECONF_LENGTH;
+extern const uint8_t ICON_GLOBALCONF[];
+extern const size_t ICON_GLOBALCONF_LENGTH;
+extern const uint8_t ICON_PLAY[];
+extern const size_t ICON_PLAY_LENGTH;
+extern const uint8_t ICON_ACTION[];
+extern const size_t ICON_ACTION_LENGTH;
+extern const uint8_t ICON_UPDIR[];
+extern const size_t ICON_UPDIR_LENGTH;
+
+
 enum screen_state {
 	SCREEN_ERROR, // File IO Error Screen
 	SCREEN_MENU,
@@ -207,7 +221,7 @@ int main() {
 				int menu_offset_prev = menu_offset;
 				uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
 				size_t menu_offset_on_current_page = menu_offset%MENU_PAGE_SIZE;
-				if(button_press & (1<<0xC)) { // The C button
+				if((button_press & (1<<0xC)) && menu_file_count_of_current_page > 0) { // The C button. Only usable for non-empty directories
 					if(strlen(menu_file_list[menu_offset_on_current_page]) > 0 && menu_file_list[menu_offset_on_current_page][strlen(menu_file_list[menu_offset_on_current_page])-1] != '/') {
 						// Load the INI file into chip8_cfg, then restore menu_current_dir's content
 						directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
@@ -226,7 +240,7 @@ int main() {
 						menu_display_update_required = true;
 						break;
 					}
-				} else if(button_press & (1<<0xF)) { // The F button
+				} else if((button_press & (1<<0xF)) && menu_file_count_of_current_page > 0) { // The F button. Only usable for non-empty directories
 					// Attach the filename to the current menu_current_dir
 					directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
 
@@ -308,7 +322,7 @@ int main() {
 						menu_file_count_of_current_page = MENU_PAGE_SIZE;
 						file_io_result = file_readdir(menu_current_dir, menu_offset/MENU_PAGE_SIZE*MENU_PAGE_SIZE, menu_file_list, &menu_file_count_of_current_page);
 						if(file_io_result == FR_OK) {
-							if(menu_file_count_of_current_page == 0) {
+							if(menu_offset > 0 && menu_file_count_of_current_page == 0) {
 								// The new page's empty. It happens when we reached the end of the directory
 								// Let's select the last entry of the previous page
 								menu_offset = (menu_offset/MENU_PAGE_SIZE-1)*MENU_PAGE_SIZE +MENU_PAGE_SIZE-1;
@@ -344,10 +358,26 @@ int main() {
 				if(menu_display_update_required) {
 					while(lcd_is_transfer_in_progress()){}
 					draw_clear(chip8.periph.display);
-					for(size_t i=0; i<menu_file_count_of_current_page; i++) {
-						draw_text(chip8.periph.display, menu_file_list[i], 6, 6*i);
+					if(menu_file_count_of_current_page > 0) {
+						// Draw filelist and cursor
+						for(size_t i=0; i<menu_file_count_of_current_page; i++) {
+							draw_text(chip8.periph.display, menu_file_list[i], 6, 6*i);
+						}
+						draw_text(chip8.periph.display, ">", 0, 6*menu_offset_on_current_page);
+					} else {
+						draw_text(chip8.periph.display, "[EMPTY]", 0, 0);
 					}
-					draw_text(chip8.periph.display, ">", 0, 6*menu_offset_on_current_page);
+					// Draw legend
+					draw_text(chip8.periph.display, "2468", 96, 24+1);
+					draw_bitmap_h8(chip8.periph.display, ICON_NAVIGATION, ICON_NAVIGATION_LENGTH, 120, 24);
+					draw_text(chip8.periph.display, "C", 114, 32+1);
+					draw_bitmap_h8(chip8.periph.display, ICON_GAMECONF, ICON_GAMECONF_LENGTH, 120, 32);
+					draw_text(chip8.periph.display, "D", 114, 40+1);
+					draw_bitmap_h8(chip8.periph.display, ICON_GLOBALCONF, ICON_GLOBALCONF_LENGTH, 120, 40);
+					draw_text(chip8.periph.display, "F", 114, 48+1);
+					draw_bitmap_h8(chip8.periph.display, ICON_PLAY, ICON_PLAY_LENGTH, 120, 48);
+					draw_text(chip8.periph.display, "X", 114, 56+1);
+					draw_bitmap_h8(chip8.periph.display, ICON_UPDIR, ICON_UPDIR_LENGTH, 120, 56);
 					lcd_transfer_begin(chip8.periph.display);
 					menu_display_update_required = false;
 				}
