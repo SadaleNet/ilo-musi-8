@@ -35,6 +35,7 @@
 #include "spi.h"
 #include "tim1_pwm.h"
 #include "watchdog.h"
+#include "util.h"
 
 #include "fatfs/ff.h"
 #include "ch32fun.h"
@@ -45,6 +46,8 @@
 #define CHIP8_QUIRK_PLATFORM_VIP (CHIP8_QUIRK_VBLANK|CHIP8_QUIRK_LOGIC) // 0x00000060
 #define CHIP8_QUIRK_PLATFORM_SCHIP (CHIP8_QUIRK_SHIFT|CHIP8_QUIRK_MEMORY_LEAVE_I_UNCHANGED|CHIP8_QUIRK_JUMP|CHIP8_QUIRK_HIRES_COLLISION)  // 0x00000413
 #define CHIP8_QUIRK_PLATFORM_OCTO (CHIP8_QUIRK_WRAP|CHIP8_QUIRK_LORES_WIDE_SPRITE|CHIP8_QUIRK_RESIZE_CLEAR_SCREEN) // 0x00000888
+
+#define GAMEPLAY_INSTRUCTION_DURATION_MS (5000U) // Show gameplay instruction for x seconds
 
 extern const uint8_t ICON_NAVIGATION[];
 extern const size_t ICON_NAVIGATION_LENGTH;
@@ -65,6 +68,7 @@ enum screen_state {
 	SCREEN_MENU,
 	SCREEN_GAME_CONFIG, // quirks, frame limit, flash to boot rom
 	SCREEN_GLOBAL_CONFIG,
+	SCREEN_PRE_GAMEPLAY, // show controls and possibly keyboard layout remap
 	SCREEN_GAMEPLAY,
 };
 
@@ -140,7 +144,7 @@ int main() {
 	enum screen_state screen_state = SCREEN_MENU;
 
 	uint8_t buzzer_volume = 15; // Just make up a value for testing
-	buzzer_set_volume(buzzer_volume);
+	buzzer_set_volume(0); // Always use buzzer volume of 0 at the beginning
 
 	watchdog_feed();
 
@@ -184,7 +188,6 @@ int main() {
 					break;
 				}
 				if(menu_display_update_required) {
-					while(lcd_is_transfer_in_progress()){}
 					draw_clear(chip8.periph.display);
 					draw_text(chip8.periph.display, "XXXXXXXXXXXXXXXXXXXXX", 0, 0);
 					draw_text(chip8.periph.display, "CARD ERROR #", 0, 20);
@@ -274,9 +277,16 @@ int main() {
 								} else {
 									game_min_cycle_interval = FUNCONF_SYSTEM_CORE_CLOCK/60/chip8_cfg->speed;
 								}
-								// TODO: show control and layout information before launching the game
-								// Start the game!
-								screen_state = SCREEN_GAMEPLAY;
+								last_frame_processed_tick = systick_now - game_min_cycle_interval;
+								last_lcd_blit_tick = systick_now - FUNCONF_SYSTEM_CORE_CLOCK/60;
+								if(chip8_cfg->input_navigation || chip8_cfg->input_action || chip8_cfg->input_layout) {
+									// If specified in the config INI file, show input buttons and the layout
+									menu_display_update_required = true;
+									screen_state = SCREEN_PRE_GAMEPLAY;
+								} else {
+									// If the input button hasn't been specified in the config file, just run the game
+									screen_state = SCREEN_GAMEPLAY;
+								}
 							} else {
 								// Failed to load the game.
 								// Do nothing. Just wait for error handling for file_io_result != FR_OK
@@ -314,7 +324,6 @@ int main() {
 				}
 
 				if(menu_dir_reload_required || menu_offset/MENU_PAGE_SIZE != menu_offset_prev/MENU_PAGE_SIZE) {
-					while(lcd_is_transfer_in_progress()){}
 					draw_clear(chip8.periph.display);
 					lcd_transfer_begin(chip8.periph.display);
 
@@ -356,7 +365,6 @@ int main() {
 
 				// Render the menu
 				if(menu_display_update_required) {
-					while(lcd_is_transfer_in_progress()){}
 					draw_clear(chip8.periph.display);
 					if(menu_file_count_of_current_page > 0) {
 						// Draw filelist and cursor
@@ -514,7 +522,6 @@ int main() {
 				}
 
 				if(menu_display_update_required) {
-					while(lcd_is_transfer_in_progress()){}
 					draw_clear(chip8.periph.display);
 					draw_text(chip8.periph.display, "CONFIG INI", 0, 0);
 					draw_text(chip8.periph.display, menu_file_list[menu_offset%MENU_PAGE_SIZE], 66, 0);
@@ -599,7 +606,57 @@ int main() {
 			break;
 			case SCREEN_GLOBAL_CONFIG:
 			{
-					// TODO: Unimplemented
+				// TODO: Unimplemented
+			}
+			break;
+			case SCREEN_PRE_GAMEPLAY:
+			{
+				uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
+				if(button_press & (1<<0x10)) {
+					menu_dir_reload_required = true;
+					screen_state = SCREEN_MENU;
+				} else if(button_press || systick_now - last_frame_processed_tick >= FUNCONF_SYSTEM_CORE_CLOCK/1000*GAMEPLAY_INSTRUCTION_DURATION_MS) {
+					// Get rid of all button press events
+					adc_button_get_just_pressed();
+					adc_button_get_just_released();
+					draw_clear(chip8.periph.display);
+					screen_state = SCREEN_GAMEPLAY;
+				}
+				if(screen_state != SCREEN_PRE_GAMEPLAY) {
+					break;
+				}
+
+				if(menu_display_update_required) {
+					draw_clear(chip8.periph.display);
+					draw_text(chip8.periph.display, "CONTROLS", 40, 0);
+					char button_str[17];
+					if(chip8_cfg->input_navigation) {
+						util_print_button_buffer(button_str, chip8_cfg->input_navigation);
+						uint8_t x = DISPLAY_WIDTH/2-(ICON_NAVIGATION_LENGTH+1+6*strlen(button_str))/2;
+						draw_bitmap_h8(chip8.periph.display, ICON_NAVIGATION, ICON_NAVIGATION_LENGTH, x, 10);
+						draw_text(chip8.periph.display, button_str, x+ICON_NAVIGATION_LENGTH+1, 11);
+					}
+					if(chip8_cfg->input_action) {
+						util_print_button_buffer(button_str, chip8_cfg->input_action);
+						uint8_t x = DISPLAY_WIDTH/2-(ICON_NAVIGATION_LENGTH+1+6*strlen(button_str))/2;
+						draw_bitmap_h8(chip8.periph.display, ICON_ACTION, ICON_ACTION_LENGTH, x, 20);
+						draw_text(chip8.periph.display, button_str, x+ICON_ACTION_LENGTH+1, 21);
+					}
+					switch(chip8_cfg->input_layout) {
+						case CHIP8_LAYOUT_QWERTY:
+							draw_text(chip8.periph.display, "123C  1234", 34, 32);
+							draw_text(chip8.periph.display, "456D  QWER", 34, 32+6);
+							draw_text(chip8.periph.display, "789E  ASDF", 34, 32+12);
+							draw_text(chip8.periph.display, "A0BF  ZXCV", 34, 32+18);
+							draw_text(chip8.periph.display, "=", 64-3, 32+9);
+						break;
+						default:
+							// do not show the layout because it's the same as the keycap label
+						break;
+					}
+					lcd_transfer_begin(chip8.periph.display);
+					menu_display_update_required = false;
+				}
 			}
 			break;
 			case SCREEN_GAMEPLAY:

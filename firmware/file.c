@@ -30,6 +30,7 @@
 #include "file.h"
 #include "lcd.h"
 #include "spi.h"
+#include "util.h"
 #include "fatfs/ff.h"
 #include <stddef.h>
 #include <stdint.h>
@@ -375,21 +376,6 @@ int file_print_hex_buffer(char *dest, const uint8_t *buffer, size_t buffer_size)
 	return ret;
 }
 
-int file_print_button_buffer(char *dest, uint16_t buttons) {
-	int ret = 0;
-	for(size_t i=0; i<16; i++) {
-		if(buttons & (1<<i)) {
-			if(i < 10) {
-				dest[ret++] = i + '0';
-			} else {
-				dest[ret++] = i - 10 + 'A';
-			}
-		}
-	}
-	dest[ret] = '\0';
-	return ret;
-}
-
 FRESULT file_save_config(const char *path, const struct chip8_config *chip8_cfg) {
 	if(!file_card_mode_enter()) {
 		return mount_result;
@@ -420,12 +406,12 @@ FRESULT file_save_config(const char *path, const struct chip8_config *chip8_cfg)
 			}
 			if(chip8_cfg->input_navigation != CHIP8_CFG_DEFAULT.input_navigation) {
 				index += sprintf(&bulkmem->file_buffer[index], "navigation = ");
-				index += file_print_button_buffer(&bulkmem->file_buffer[index], chip8_cfg->input_navigation);
+				index += util_print_button_buffer(&bulkmem->file_buffer[index], chip8_cfg->input_navigation);
 				index += sprintf(&bulkmem->file_buffer[index], "\n");
 			}
 			if(chip8_cfg->input_action != CHIP8_CFG_DEFAULT.input_action) {
 				index += sprintf(&bulkmem->file_buffer[index], "action = ");
-				index += file_print_button_buffer(&bulkmem->file_buffer[index], chip8_cfg->input_action);
+				index += util_print_button_buffer(&bulkmem->file_buffer[index], chip8_cfg->input_action);
 				index += sprintf(&bulkmem->file_buffer[index], "\n");
 			}
 			if(memcmp(chip8_cfg->font, CHIP8_CFG_DEFAULT.font, sizeof(chip8_cfg->font))) {
