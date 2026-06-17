@@ -43,7 +43,6 @@ struct shared_buffer {
 	struct chip8_config chip8_cfg;
 	char file_buffer[512];
 	char menu_file_list[MENU_PAGE_SIZE][14];
-	char menu_current_dir[256];
 };
 
 extern struct shared_buffer *bulkmem;

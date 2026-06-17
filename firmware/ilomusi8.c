@@ -157,8 +157,7 @@ int main() {
 
 	// For SCREEN_MENU
 	char (*menu_file_list)[14] = bulkmem->menu_file_list;
-	char *menu_current_dir = bulkmem->menu_current_dir;
-	menu_current_dir[0] = '\0';
+	static char menu_current_dir[256] = {0}; // Must not use bulkmem because this path's used for loading the ROM
 	int menu_offset = 0;
 	FRESULT file_io_result = FR_OK;
 	size_t menu_file_count_of_current_page = 0;
