@@ -60,6 +60,11 @@ void chip8_step(struct chip8_machine *machine) {
 		return;
 	}
 
+	// The +1 here is required because 2 bytes got read for each instruction.
+	// For example, if CHIP8_MEMORY_SIZE is 0x1000, PC is 0xFFF, the machine would read 0xFFF and 0x1000, which means that overflow would occur.
+	// PC can only point to 0xFFE at largest, which the machine would read 0xFFE and 0xFFF, which's within CHIP8_MEMORY_SIZE
+	CHIP8_HALT(cpu->pc[cpu->pc_index]+1 >= CHIP8_MEMORY_SIZE, CHIP8_REQUEST_HALT_PC_ERROR);
+
 	uint16_t instruction = mem[cpu->pc[cpu->pc_index]] << 8;
 	instruction |= mem[cpu->pc[cpu->pc_index]+1];
 	uint8_t *vx = &cpu->v[(instruction & 0x0F00)>>8];
@@ -580,11 +585,6 @@ void chip8_step(struct chip8_machine *machine) {
 	if(!prevents_stepping) {
 		cpu->pc[cpu->pc_index] += 2;
 	}
-
-	// The +1 here is required because 2 bytes got read for each instruction.
-	// For example, if CHIP8_MEMORY_SIZE is 0x1000, PC is 0xFFF, the machine would read 0xFFF and 0x1000, which means that overflow would occur.
-	// PC can only point to 0xFFE at largest, which the machine would read 0xFFE and 0xFFF, which's within CHIP8_MEMORY_SIZE
-	CHIP8_HALT(cpu->pc[cpu->pc_index]+1 >= CHIP8_MEMORY_SIZE, CHIP8_REQUEST_HALT_PC_ERROR);
 }
 
 void chip8_timer_step(struct chip8_machine *machine) {

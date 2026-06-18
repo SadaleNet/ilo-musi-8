@@ -70,6 +70,8 @@ enum screen_state {
 	SCREEN_GLOBAL_CONFIG,
 	SCREEN_PRE_GAMEPLAY, // show controls and possibly keyboard layout remap
 	SCREEN_GAMEPLAY,
+	SCREEN_GAMEOVER,
+	SCREEN_GAME_CRASHED,
 };
 
 enum game_config_selection {
@@ -618,6 +620,8 @@ int main() {
 					// Get rid of all button press events
 					adc_button_get_just_pressed();
 					adc_button_get_just_released();
+					// We stole the display buffer for showing the controls
+					// Gotta clean it up before running the CHIP-8 emulator
 					draw_clear(chip8.periph.display);
 					screen_state = SCREEN_GAMEPLAY;
 				}
@@ -679,9 +683,17 @@ int main() {
 
 					uint32_t button_just_pressed = chip8_keymap(adc_button_get_just_pressed());
 					if((button_just_pressed & (1<<0x10)) || chip8.periph.requests & CHIP8_REQUEST_HALT_MASK) {
-						menu_dir_reload_required = true;
 						buzzer_set_volume(0);
-						screen_state = SCREEN_MENU;
+						if((button_just_pressed & (1<<0x10))) {
+							menu_dir_reload_required = true;
+							screen_state = SCREEN_MENU;
+						} else if (chip8.periph.requests & CHIP8_REQUEST_HALT_EXIT_EMULATOR) {
+							menu_display_update_required = true;
+							screen_state = SCREEN_GAMEOVER;
+						} else {
+							menu_display_update_required = true;
+							screen_state = SCREEN_GAME_CRASHED;
+						}
 						break;
 					}
 					last_frame_processed_tick = systick_now;
@@ -699,8 +711,80 @@ int main() {
 				}
 			}
 			break;
-		}
+			case SCREEN_GAMEOVER:
+			{
+				uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
+				if(button_press & (1<<0x10)) {
+					menu_dir_reload_required = true;
+					screen_state = SCREEN_MENU;
+				}
 
+				if(menu_display_update_required) {
+					draw_clear(chip8.periph.display);
+					draw_text(chip8.periph.display, "GAME OVER", 37, 24);
+					draw_text(chip8.periph.display, "PRESS <X> TO EXIT", 13, 34);
+					lcd_transfer_begin(chip8.periph.display);
+					menu_display_update_required = false;
+				}
+			}
+			break;
+			case SCREEN_GAME_CRASHED:
+			{
+				uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
+				if(button_press & (1<<0x10)) {
+					menu_dir_reload_required = true;
+					screen_state = SCREEN_MENU;
+				}
+
+				if(menu_display_update_required) {
+					draw_clear(chip8.periph.display);
+					switch(chip8.periph.requests & CHIP8_REQUEST_HALT_MASK) {
+						case CHIP8_REQUEST_HALT_I_ERROR:
+							draw_text(chip8.periph.display, "I ERROR", 0, 0);
+						break;
+						case CHIP8_REQUEST_HALT_STACK_ERROR:
+							draw_text(chip8.periph.display, "STACK ERROR", 0, 0);
+						break;
+						case CHIP8_REQUEST_HALT_PC_ERROR:
+							draw_text(chip8.periph.display, "PC ERROR", 0, 0);
+						break;
+						case CHIP8_REQUEST_HALT_INVALID_INSTRUCTION:
+							draw_text(chip8.periph.display, "INVALID INSTRUCTION", 0, 0);
+						break;
+						default:
+							draw_text(chip8.periph.display, "UNKNOWN ERROR", 0, 0);
+						break;
+					}
+					char strbuf[32];
+					uint16_t instruction = chip8.mem[chip8.cpu.pc[chip8.cpu.pc_index]] << 8;
+					instruction |= chip8.mem[chip8.cpu.pc[chip8.cpu.pc_index]+1];
+					// Show I and current PC content
+					sprintf(strbuf, "i:%04X pc:%04X[%04X]", chip8.cpu.i, chip8.cpu.pc[chip8.cpu.pc_index], instruction);
+					draw_text(chip8.periph.display, strbuf, 0, 12);
+					// Show stacktrace
+					size_t pc_index = chip8.cpu.pc_index;
+					size_t position_counter = 0;
+					while(pc_index-- > 0) {
+						sprintf(strbuf, "%03X", chip8.cpu.pc[pc_index] & 0xFFF);
+						draw_text(chip8.periph.display, strbuf, 24*(position_counter%5), 18+6*(position_counter/5));
+						position_counter++;
+					}
+					// Show v registers
+					sprintf(strbuf, "v0~3: %02X %02X %02X %02X", chip8.cpu.v[0], chip8.cpu.v[1], chip8.cpu.v[2], chip8.cpu.v[3]);
+					draw_text(chip8.periph.display, strbuf, 0, 36);
+					sprintf(strbuf, "v4~7: %02X %02X %02X %02X", chip8.cpu.v[4], chip8.cpu.v[5], chip8.cpu.v[6], chip8.cpu.v[7]);
+					draw_text(chip8.periph.display, strbuf, 0, 42);
+					sprintf(strbuf, "v8~b: %02X %02X %02X %02X", chip8.cpu.v[8], chip8.cpu.v[9], chip8.cpu.v[10], chip8.cpu.v[11]);
+					draw_text(chip8.periph.display, strbuf, 0, 48);
+					sprintf(strbuf, "vc~f: %02X %02X %02X %02X", chip8.cpu.v[12], chip8.cpu.v[13], chip8.cpu.v[14], chip8.cpu.v[15]);
+					draw_text(chip8.periph.display, strbuf, 0, 54);
+
+					lcd_transfer_begin(chip8.periph.display);
+					menu_display_update_required = false;
+				}
+			}
+			break;
+		}
 
 		watchdog_feed();
 	}
