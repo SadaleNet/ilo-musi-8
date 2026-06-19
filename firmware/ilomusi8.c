@@ -131,7 +131,7 @@ bool menu_display_update_required;
 char (*menu_file_list)[14];
 static char menu_current_dir[256]; // Must not use bulkmem because this path's used for loading the ROM
 int menu_offset;
-FRESULT file_io_result;
+uint8_t file_io_result;
 size_t menu_file_count_of_current_page;
 bool menu_dir_reload_required;
 

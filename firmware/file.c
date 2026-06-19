@@ -320,7 +320,7 @@ static bool file_parse_ini(struct ini_parser *parser, const char *buffer, size_t
 	return true;
 }
 
-FRESULT file_load_config(const char *path, struct chip8_config *chip8_cfg) {
+uint8_t file_load_config(const char *path, struct chip8_config *chip8_cfg) {
 	if(!file_card_mode_enter()) {
 		return mount_result;
 	}
@@ -376,7 +376,7 @@ int file_print_hex_buffer(char *dest, const uint8_t *buffer, size_t buffer_size)
 	return ret;
 }
 
-FRESULT file_save_config(const char *path, const struct chip8_config *chip8_cfg) {
+uint8_t file_save_config(const char *path, const struct chip8_config *chip8_cfg) {
 	if(!file_card_mode_enter()) {
 		return mount_result;
 	}
@@ -442,7 +442,7 @@ FRESULT file_save_config(const char *path, const struct chip8_config *chip8_cfg)
 	return ret;
 }
 
-FRESULT file_load_rom(const char *path, const struct chip8_config *chip8_cfg, struct chip8_machine *chip8_machine) {
+uint8_t file_load_rom(const char *path, const struct chip8_config *chip8_cfg, struct chip8_machine *chip8_machine) {
 	if(!file_card_mode_enter()) {
 		return mount_result;
 	}
@@ -462,7 +462,7 @@ FRESULT file_load_rom(const char *path, const struct chip8_config *chip8_cfg, st
 	return ret;
 }
 
-FRESULT file_readdir(const char *path, size_t offset, char (*filelist)[14], size_t *count) {
+uint8_t file_readdir(const char *path, size_t offset, char (*filelist)[14], size_t *count) {
 	if(!file_card_mode_enter()) {
 		return mount_result;
 	}
