@@ -32,7 +32,8 @@
 // Extends on FRESULT of fatfs/ff.h
 #define FR_INI_PARSE_ERROR (90) // The INI config file has format error
 #define FR_VOLUME_FULL (91) // f_write() had indicated that the volume is full
-#define FR_FIRMWARE_VERIFICATION_ERROR (92) // The firwmare verification failed
+#define FR_PATH_LENGTH_ERROR (92) // Directory recursion limit reached
+#define FR_FIRMWARE_VERIFICATION_ERROR (93) // The firwmare verification failed
 
 void file_first_mount(void); // Process card insertion/removal events. Can be called after adc_is_reading_ready()
 void file_loop(void); // Process card insertion/removal events

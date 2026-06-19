@@ -106,8 +106,9 @@ static uint32_t chip8_keymap(uint32_t button_state) {
 }
 
 static void directory_attach_filename(char *directory_str, const char *filename) {
+	// Warning: No boundary check in this function
+	// The boundary check's handled upon entering the direcotry (strlen(menu_current_dir) >= sizeof(menu_current_dir)-13-1)
 	size_t current_dir_length = strlen(directory_str);
-	// TODO: this function's unsafe. Need boundry check.
 	memcpy(&directory_str[current_dir_length], filename, strlen(filename)+1);
 }
 
@@ -119,6 +120,16 @@ static void directory_remove_filename(char *directory_str) {
 		directory_str[0] = '\0';
 	}
 }
+
+static void directory_up(char *directory_str) {
+	if(strlen(directory_str) >= 1) {
+		// Remove the trailing slash
+		directory_str[strlen(directory_str)-1] = '\0';
+		// Look for the next trailing slash, then make it \0 for upping a directory level
+		directory_remove_filename(directory_str);
+	}
+}
+
 
 // Shared by all screens
 enum screen_state screen_state;
@@ -147,7 +158,8 @@ uint32_t last_frame_processed_tick;
 uint32_t last_lcd_blit_tick;
 
 static void screen_error_handler(void) {
-	if(chip8_keymap(adc_button_get_just_pressed())) {
+	uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
+	if(button_press & (1<<0x10)) {
 		menu_current_dir[0] = '\0';
 		menu_offset = 0;
 		menu_dir_reload_required = true;
@@ -180,9 +192,13 @@ static void screen_error_handler(void) {
 			case FR_FIRMWARE_VERIFICATION_ERROR:
 				draw_text(chip8.periph.display, "FW VERIFY ERROR", 0, 30);
 			break;
+			case FR_PATH_LENGTH_ERROR:
+				draw_text(chip8.periph.display, "PATH TOO LONG", 0, 30);
+			break;
 			default:
 			break;
 		}
+		draw_text(chip8.periph.display, "PRESS <X> TO PROCEED", 0, 40);
 		draw_text(chip8.periph.display, "XXXXXXXXXXXXXXXXXXXXX", 0, 58);
 		lcd_transfer_begin(chip8.periph.display);
 		menu_display_update_required = false;
@@ -217,9 +233,18 @@ static void screen_menu_handler(void) {
 		directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
 
 		if(strlen(menu_file_list[menu_offset_on_current_page]) > 0 && menu_file_list[menu_offset_on_current_page][strlen(menu_file_list[menu_offset_on_current_page])-1] == '/') {
-			// Enter the directory
-			menu_offset = 0;
-			menu_dir_reload_required = true;
+			if(strlen(menu_current_dir) >= sizeof(menu_current_dir)-13-1) { // 13 for 8.3 filename with trailing slash, 1 for null terminator
+				// The path's too long
+				// We must reserve enough space for storing the filename next time we select a file.
+				// Since the path's too long, we need to get out of here and show error to the end-user
+				directory_up(menu_current_dir);
+				file_io_result = FR_PATH_LENGTH_ERROR;
+				// Here, now that I just need to wait for the (file_io_result != FR_OK) handling way below
+			} else {
+				// After entering the directory, reset the cursor to the beginning
+				menu_offset = 0;
+				menu_dir_reload_required = true;
+			}
 		} else {
 			// Load INI config
 			memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "INI", 3); // replace file extension to .INI
@@ -268,12 +293,7 @@ static void screen_menu_handler(void) {
 		}
 	} else if(button_press & (1<<0x10)) { // The X button
 		// Up a directory
-		if(strlen(menu_current_dir) >= 1) {
-			// Remove the trailing slash
-			menu_current_dir[strlen(menu_current_dir)-1] = '\0';
-			// Look for the next trailing slash, then make it \0 for upping a directory level
-			directory_remove_filename(menu_current_dir);
-		}
+		directory_up(menu_current_dir);
 		// Always reload directory so that the user would have visual feedback
 		menu_offset = 0;
 		menu_dir_reload_required = true;
