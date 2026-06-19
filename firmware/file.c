@@ -38,6 +38,10 @@
 #include <string.h>
 #include <assert.h>
 
+#define FLASH_FILE "ILOMUSI8.BIN"
+#define FLASH_START_OFFSET (0x08000000)
+#define FLASH_END_OFFSET (0x0800F800)
+
 static const struct chip8_config CHIP8_CFG_DEFAULT = {
 	.font = {
 		0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -502,6 +506,44 @@ uint8_t file_readdir(const char *path, size_t offset, char (*filelist)[14], size
 		f_closedir(&dir);
 	}
 	*count = fulfilled_count;
+
+	file_card_mode_exit();
+	return ret;
+}
+
+uint8_t file_verify_firmware_update(void) {
+	if(!file_card_mode_enter()) {
+		return mount_result;
+	}
+
+	FIL fil;
+	FRESULT ret;
+	UINT bytesread;
+	uint8_t *flash_offset = (uint8_t*)FLASH_START_OFFSET;
+	ret = f_open(&fil, FLASH_FILE, FA_READ);
+	if(ret == FR_OK) {
+		char *buffer = (char*)bulkmem->file_buffer;
+		size_t buffer_size = sizeof(bulkmem->file_buffer);
+		while(flash_offset < (uint8_t*)FLASH_END_OFFSET) {
+			ret = f_read(&fil, buffer, buffer_size, &bytesread);
+			if(ret != FR_OK) { // Error condition
+				break;
+			}
+			if(memcmp(flash_offset, buffer, bytesread)) {
+				ret = FR_FIRMWARE_VERIFICATION_ERROR;
+				break;
+			}
+			flash_offset += bytesread;
+			if(bytesread < buffer_size) { // EOF condition
+				break;
+			}
+		}
+		f_close(&fil);
+	}
+	if(ret == FR_OK) {
+		// Delete firmware file for clean up
+		ret = f_unlink(FLASH_FILE);
+	}
 
 	file_card_mode_exit();
 	return ret;

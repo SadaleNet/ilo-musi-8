@@ -72,6 +72,7 @@ enum screen_state {
 	SCREEN_GAMEPLAY,
 	SCREEN_GAMEOVER,
 	SCREEN_GAME_CRASHED,
+	SCREEN_FW_UPDATE_OK,
 };
 
 enum game_config_selection {
@@ -175,6 +176,9 @@ static void screen_error_handler(void) {
 			break;
 			case FR_VOLUME_FULL:
 				draw_text(chip8.periph.display, "VOLUME FULL", 0, 30);
+			break;
+			case FR_FIRMWARE_VERIFICATION_ERROR:
+				draw_text(chip8.periph.display, "FW VERIFY ERROR", 0, 30);
 			break;
 			default:
 			break;
@@ -676,8 +680,6 @@ static void screen_gameover_handler(void) {
 	if(button_press & (1<<0x10)) {
 		menu_dir_reload_required = true;
 		screen_state = SCREEN_MENU;
-	}
-	if(screen_state != SCREEN_GAMEOVER) {
 		return;
 	}
 
@@ -695,8 +697,6 @@ static void screen_game_crashed_handler(void) {
 	if(button_press & (1<<0x10)) {
 		menu_dir_reload_required = true;
 		screen_state = SCREEN_MENU;
-	}
-	if(screen_state != SCREEN_GAME_CRASHED) {
 		return;
 	}
 
@@ -748,6 +748,23 @@ static void screen_game_crashed_handler(void) {
 	}
 }
 
+static void screen_fw_update_ok_handler(void) {
+	uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
+	if(button_press & (1<<0x10)) {
+		menu_dir_reload_required = true;
+		screen_state = SCREEN_MENU;
+		return;
+	}
+
+	if(menu_display_update_required) {
+		draw_clear(chip8.periph.display);
+		draw_text(chip8.periph.display, "UPDATE COMPLETED", 16, 24);
+		draw_text(chip8.periph.display, "PRESS <X> TO PROCEED", 4, 34);
+		lcd_transfer_begin(chip8.periph.display);
+		menu_display_update_required = false;
+	}
+}
+
 int main() {
 	// Kickoff the watchdog as early as possible
 	watchdog_init();
@@ -772,12 +789,13 @@ int main() {
 	spi_set_mode(SPI_MODE_LCD);
 	lcd_init_second_stage(); // If card's inserted, must be done after spi_card_mount_filesystem()
 
+	lcd_set_brightness(9);
+
 	buzzer_volume = 15; // Just make up a value for testing
 	buzzer_set_volume(0); // Always use buzzer volume of 0 at the beginning
 
 	watchdog_feed();
 
-	screen_state = SCREEN_MENU;
 	assert(sizeof(struct shared_buffer) <= sizeof(chip8.mem));
 	bulkmem = (struct shared_buffer*)chip8.mem;
 	chip8_cfg = &bulkmem->chip8_cfg;
@@ -798,6 +816,13 @@ int main() {
 	game_config_index = 0;
 	game_config_old_value = 0;
 
+	file_io_result = file_verify_firmware_update();
+	if(file_io_result == FR_NO_FILE) {
+		screen_state = SCREEN_MENU;
+	} else {
+		screen_state = file_io_result == FR_OK ? SCREEN_FW_UPDATE_OK : SCREEN_ERROR;
+	}
+
 	// For SCREEN_GAMEPLAY
 	game_min_cycle_interval = 0;
 	last_frame_processed_tick = SysTick->CNT;
@@ -815,6 +840,7 @@ int main() {
 			case SCREEN_GAMEPLAY: screen_gameplay_handler(); break;
 			case SCREEN_GAMEOVER: screen_gameover_handler(); break;
 			case SCREEN_GAME_CRASHED: screen_game_crashed_handler(); break;
+			case SCREEN_FW_UPDATE_OK: screen_fw_update_ok_handler(); break;
 		}
 
 		watchdog_feed();
