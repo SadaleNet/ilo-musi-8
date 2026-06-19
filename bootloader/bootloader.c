@@ -145,7 +145,7 @@ void lcd_transfer_row(int i, uint8_t buffer[128]) {
 	// Send the row's data to LCD
 	for (int j = 0; j < 128; j++) {
 		// Send data for last row. Hard-code to stripe for remaining rows
-		if(i == 7) {
+		if(i == 0) {
 			spi_send_byte(buffer[j]);
 		} else {
 			spi_send_byte(0x01);
@@ -240,7 +240,7 @@ __attribute__((noreturn)) int main() {
 			display_buffer[DISPLAY_SECTOR_POS] = 0x55;
 			display_buffer[DISPLAY_ERROR_POS] = 0x55;
 
-			lcd_transfer_row(7, display_buffer);
+			lcd_transfer_row(0, display_buffer);
 			Delay_Ms(3000);
 
 			flash_unlock();
@@ -254,7 +254,7 @@ __attribute__((noreturn)) int main() {
 		size_t offset = FLASH_START_OFFSET;
 		do {
 			display_buffer[DISPLAY_SECTOR_POS+1] = (offset-FLASH_START_OFFSET)/FLASH_SECTOR_SIZE;
-			lcd_transfer_row(7, display_buffer);
+			lcd_transfer_row(0, display_buffer);
 
 			static BYTE buf[FLASH_SECTOR_SIZE];
 			memset(buf, 0xFF, FLASH_SECTOR_SIZE);
@@ -277,7 +277,7 @@ __attribute__((noreturn)) int main() {
 	} else {
 		display_buffer[DISPLAY_SMILEY_POS+2] = 0x42; // smile
 	}
-	lcd_transfer_row(7, display_buffer);
+	lcd_transfer_row(0, display_buffer);
 
 	#ifdef TURN_ON_BACKLIGHT_UPON_COMPLETION
 		GPIOC->BSHR = (1<<PIN_LCD_BL)<<0;

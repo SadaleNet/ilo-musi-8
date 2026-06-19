@@ -22,7 +22,7 @@ uint8_t spi_send_byte(uint8_t data);
 // Algorithm: scan and program while scanning if file content is different from flash content
 // Keep scanning until there's no difference until FLASH_MAX_RETRIES is reached
 #define FLASH_MAX_RETRIES (5)
-#define FLASH_FILENAME "SONASIN.BIN" // Must be in uppercase. 8.3 filename
+#define FLASH_FILENAME "ILOMUSI8.BIN" // Must be in uppercase. 8.3 filename
 
 // Position to display the update status. 0 is leftmost, 127 is rightmost
 #define DISPLAY_RETRIES_POS (38)
