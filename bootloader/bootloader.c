@@ -156,7 +156,7 @@ void lcd_transfer_row(int i, uint8_t buffer[128]) {
 }
 
 void lcd_init() {
-	Delay_Ms(500); // Wait for power to stabalize (LCD recommends >1ms)
+	//Delay_Ms(10); // Wait for power to stabalize (LCD recommends >1ms); Commented out because the card initializaton takes at least 10ms, which's enough.
 	// Set LCD CS DC to LOW, also toggle LCD RES pin (first set it to LOW, then set it to HIGH)
 	GPIOC->BSHR = (((1<<PIN_LCD_RES)|(1<<PIN_LCD_CS)|(1<<PIN_LCD_DC))<<16);
 	Delay_Us(100); // LCD's requirement: >5us
@@ -207,6 +207,11 @@ __attribute__((noreturn)) int main() {
 		launch_user_code();
 	}
 
+	// Setting the divider to 16. That'd be 48Mhz/16 = 3Mhz
+	// SPI1->CTLR1 &= ~SPI_CTLR1_BR;
+	// SPI1->CTLR1 |= SPI_CTLR1_BR_0|SPI_CTLR1_BR_1;
+	SPI1->CTLR1 &= ~(SPI_CTLR1_BR_2);
+
 	size_t retries = 0;
 	uint8_t file_content_changed = 0;
 	uint8_t error_detected = 0;
@@ -224,7 +229,7 @@ __attribute__((noreturn)) int main() {
 
 		if(retries == 0) {
 			if (res != FR_OK) {
-				// Firmware file not found. Launching user code!
+				// Firmware file not found / cannot be opened. Launching user code!
 				launch_user_code();
 			}
 
@@ -241,7 +246,6 @@ __attribute__((noreturn)) int main() {
 			display_buffer[DISPLAY_ERROR_POS] = 0x55;
 
 			lcd_transfer_row(0, display_buffer);
-			Delay_Ms(3000);
 
 			flash_unlock();
 		} else if (res != FR_OK) {
