@@ -517,8 +517,8 @@ static void screen_game_config_handler(void) {
 
 	if(menu_display_update_required) {
 		draw_clear(chip8.periph.display);
-		draw_text(chip8.periph.display, "CONFIG INI", 0, 0);
-		draw_text(chip8.periph.display, menu_file_list[menu_offset%MENU_PAGE_SIZE], 66, 0);
+		draw_text(chip8.periph.display, "CONFIG", 0, 0);
+		draw_text(chip8.periph.display, menu_file_list[menu_offset%MENU_PAGE_SIZE], 42, 0);
 
 		draw_text(chip8.periph.display, "QUIRKS.....", 12, 14);
 			draw_text(chip8.periph.display, "SPEED LIMIT......", 12, 23);
