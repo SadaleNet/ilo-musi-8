@@ -461,6 +461,7 @@ uint8_t file_save_config(const char *path, const struct chip8_config *chip8_cfg)
 			ret = f_write(&fil, bulkmem->file_buffer, index, &byteswritten);
 			if(byteswritten != index) { ret = FR_VOLUME_FULL; }
 			if(ret != FR_OK) { break; }
+			f_sync(&fil);
 
 			// Need to split the f_write() into two blocks to fit the string into the 512 bytes buffer
 			index = 0;
@@ -575,7 +576,8 @@ uint8_t file_verify_firmware_update(void) {
 		f_close(&fil);
 	}
 	if(ret == FR_OK) {
-		// Delete firmware file for clean up
+		// Verification completed
+		// Delete firmware file so that the bootloader won't flash it again
 		ret = f_unlink(FLASH_FILE);
 	}
 
