@@ -568,10 +568,10 @@ void chip8_step(struct chip8_machine *machine) {
 				}
 				break;
 				case 0x0075: // FX75 Superchip
-					memcpy(periph->storage_flags, cpu->v, (instruction & 0x0F00)>>8);
+					memcpy(periph->storage_flags, cpu->v, ((instruction & 0x0F00)>>8)+1);
 				break;
 				case 0x0085: // FX85 Superchip
-					memcpy(cpu->v, periph->storage_flags, (instruction & 0x0F00)>>8);
+					memcpy(cpu->v, periph->storage_flags, ((instruction & 0x0F00)>>8)+1);
 				break;
 				default:
 					CHIP8_HALT(1, CHIP8_REQUEST_HALT_INVALID_INSTRUCTION);

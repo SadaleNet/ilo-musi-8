@@ -42,6 +42,8 @@
 #define FLASH_START_OFFSET (0x08000000)
 #define FLASH_END_OFFSET (0x0800F800)
 
+#define STORAGE_FLAG_FILE "FX75FX85.BIN"
+
 static const struct chip8_config CHIP8_CFG_DEFAULT = {
 	.font = {
 		0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -364,9 +366,41 @@ uint8_t file_load_config(const char *path, struct chip8_config *chip8_cfg) {
 			chip8_cfg->input_layout >= CHIP8_LAYOUT_COUNT) {
 			ret = FR_INI_PARSE_ERROR; // Parsing validation error!
 		}
+	} else if(ret == FR_NO_FILE) {
+		// It's ok to have the INI file missing
+		// The default config would be loaded and used
+		ret = FR_OK;
 	}
 
-	// TODO: also load chip8_cfg->storage_flags here if such a file exists.
+	// Attempt to load the storage flag
+	if(ret == FR_OK) {
+		// Let's set the default storage flag state to zero by default
+		// Then attempt to read the storage flag file, which'd fail siltently upon failure
+		memset(chip8_cfg->storage_flags, 0, sizeof(chip8_cfg->storage_flags));
+		if(f_open(&fil, STORAGE_FLAG_FILE, FA_READ) == FR_OK) {
+			f_read(&fil, chip8_cfg->storage_flags, sizeof(chip8_cfg->storage_flags), &bytesread);
+			f_close(&fil);
+		}
+	}
+
+	file_card_mode_exit();
+	return ret;
+}
+
+uint8_t file_save_storage_flag(const uint8_t *storage_flags, size_t flag_size) {
+	if(!file_card_mode_enter()) {
+		return mount_result;
+	}
+
+	FIL fil;
+	FRESULT ret = f_open(&fil, STORAGE_FLAG_FILE, FA_WRITE|FA_CREATE_ALWAYS);
+	if(ret == FR_OK) {
+		UINT byteswritten;
+		ret = f_write(&fil, storage_flags, flag_size, &byteswritten);
+		if(byteswritten != flag_size) { ret = FR_VOLUME_FULL; }
+		f_close(&fil);
+	}
+
 	file_card_mode_exit();
 	return ret;
 }

@@ -153,9 +153,28 @@ uint8_t game_config_index;
 uint32_t game_config_old_value;
 
 // For SCREEN_GAMEPLAY
+uint8_t last_storage_flag[sizeof(chip8_cfg->storage_flags)/sizeof(*chip8_cfg->storage_flags)]; // storage flag state upon game launch
 uint32_t game_min_cycle_interval;
 uint32_t last_frame_processed_tick;
 uint32_t last_lcd_blit_tick;
+
+static void get_rid_of_all_button_events(void) {
+	// Clean screen reasons:
+	// 1. We wait until release of all buttons.
+	// In case a button got held, the screen content won't get shown.
+	// 2. For SCREEN_PRE_GAMEPLAY, we stole the display buffer for showing the controls
+	// so we also must clean it up before running the CHIP-8 emulator
+	draw_clear(chip8.periph.display);
+	lcd_transfer_begin(chip8.periph.display);
+	// Wait until all buttons got released
+	// That's because CHIP-8 has a instruction that waits for key release
+	// If the button got pressed while the game's launched,
+	// the button release would be detected by the game
+	while(chip8_keymap(adc_button_get_state()));
+	// Get rid of all button press events
+	adc_button_get_just_pressed();
+	adc_button_get_just_released();
+}
 
 static void screen_error_handler(void) {
 	uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
@@ -216,14 +235,7 @@ static void screen_menu_handler(void) {
 			memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "INI", 3);
 			file_io_result = file_load_config(menu_current_dir, chip8_cfg);
 			directory_remove_filename(menu_current_dir);
-
-			if(file_io_result == FR_NO_FILE) {
-				// It's ok to have the INI file missing
-				// The default config would be loaded and
-				// we'll create the config upon it's saved
-				file_io_result = FR_OK;
-			}
-
+			// Head to the game config screen
 			screen_state = (file_io_result == FR_OK) ? SCREEN_GAME_CONFIG : SCREEN_ERROR;
 			menu_display_update_required = true;
 			return;
@@ -249,20 +261,13 @@ static void screen_menu_handler(void) {
 			// Load INI config
 			memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "INI", 3); // replace file extension to .INI
 			file_io_result = file_load_config(menu_current_dir, chip8_cfg);
-			if (file_io_result == FR_NO_FILE) {
-				// Ignore INI file missing error.
-				// The default config would be loaded in this case
-				file_io_result = FR_OK;
-			}
 
 			if(file_io_result == FR_OK) {
 				// Config file loaded successfully. Let's try loading the game!
 				memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "CH8", 3); // resume file extension of .CH8
 				file_io_result = file_load_rom(menu_current_dir, chip8_cfg, &chip8);
 				if(file_io_result == FR_OK) {
-					// Get rid of all button press events
-					adc_button_get_just_pressed();
-					adc_button_get_just_released();
+					memcpy(last_storage_flag, chip8_cfg->storage_flags, sizeof(chip8_cfg->storage_flags));
 					// Initialize peripheral variables
 					buzzer_set_buffer(chip8.periph.audio);
 					buzzer_set_pitch(chip8.periph.audio_pitch);
@@ -278,7 +283,8 @@ static void screen_menu_handler(void) {
 						menu_display_update_required = true;
 						screen_state = SCREEN_PRE_GAMEPLAY;
 					} else {
-						// If the input button hasn't been specified in the config file, just run the game
+						// If the input button hasn't been specified in the config file, just run the game!
+						get_rid_of_all_button_events();
 						screen_state = SCREEN_GAMEPLAY;
 					}
 				} else {
@@ -602,12 +608,7 @@ static void screen_pre_gameplay_handler(void) {
 		menu_dir_reload_required = true;
 		screen_state = SCREEN_MENU;
 	} else if(button_press || systick_now - last_frame_processed_tick >= FUNCONF_SYSTEM_CORE_CLOCK/1000*GAMEPLAY_INSTRUCTION_DURATION_MS) {
-		// Get rid of all button press events
-		adc_button_get_just_pressed();
-		adc_button_get_just_released();
-		// We stole the display buffer for showing the controls
-		// Gotta clean it up before running the CHIP-8 emulator
-		draw_clear(chip8.periph.display);
+		get_rid_of_all_button_events();
 		screen_state = SCREEN_GAMEPLAY;
 	}
 	if(screen_state != SCREEN_PRE_GAMEPLAY) {
@@ -668,7 +669,16 @@ static void screen_gameplay_handler(void) {
 		uint32_t button_just_pressed = chip8_keymap(adc_button_get_just_pressed());
 		if((button_just_pressed & (1<<0x10)) || chip8.periph.requests & CHIP8_REQUEST_HALT_MASK) {
 			buzzer_set_volume(0);
-			if((button_just_pressed & (1<<0x10))) {
+
+			if(memcmp(last_storage_flag, chip8.periph.storage_flags, sizeof(chip8.periph.storage_flags))) {
+				// Storage flag changed. Let's save it!
+				file_io_result = file_save_storage_flag(chip8.periph.storage_flags, sizeof(chip8.periph.storage_flags));
+			}
+
+			if(file_io_result != FR_OK) {
+				menu_display_update_required = true;
+				screen_state = SCREEN_ERROR;
+			} else if((button_just_pressed & (1<<0x10))) {
 				menu_dir_reload_required = true;
 				screen_state = SCREEN_MENU;
 			} else if (chip8.periph.requests & CHIP8_REQUEST_HALT_EXIT_EMULATOR) {
