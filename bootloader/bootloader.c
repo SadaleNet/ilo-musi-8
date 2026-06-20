@@ -28,7 +28,7 @@
 #include "ch32fun.h"
 #include "pff3a/pff.h"
 
-__attribute__((noreturn)) void launch_user_code() {
+__attribute__((noreturn)) void launch_user_code(void) {
 	FLASH->BOOT_MODEKEYR = FLASH_KEY1;
 	FLASH->BOOT_MODEKEYR = FLASH_KEY2;
 	FLASH->STATR = 0; // Same as `FLASH->STATR &= ~FLASH_STATR_BOOT_MODE;` but it saves space
@@ -59,7 +59,7 @@ uint8_t LCD_INIT_SEQUENCE[] = {
 	0xAF, // Display ON (For simplicity, I'm gonna turn it on here before filling in the display buffer)
 };
 
-void flash_unlock() {
+void flash_unlock(void) {
 	if(FLASH->CTLR & FLASH_CTLR_LOCK) {
 		FLASH->KEYR = FLASH_KEY1;
 		FLASH->KEYR = FLASH_KEY2;
@@ -70,14 +70,14 @@ void flash_unlock() {
 	}
 }
 
-void flash_lock() {
+void flash_lock(void) {
 	FLASH->CTLR |= FLASH_CTLR_LOCK|FLASH_CTLR_FLOCK;
 }
 
 // Returns 0 if no content change
 // Returns 1 if content is changed
 // Returns 2 if input is invalid
-uint8_t flash_write_sector(uint32_t offset, void *data) {
+uint8_t flash_write_sector(uint32_t offset, const void *data) {
 	if(offset < FLASH_START_OFFSET || offset+FLASH_SECTOR_SIZE > FLASH_END_OFFSET || offset%FLASH_SECTOR_SIZE != 0) {
 		return 2;
 	}
@@ -155,7 +155,7 @@ void lcd_transfer_row(int i, uint8_t buffer[128]) {
 	GPIOC->BSHR = ((1<<PIN_LCD_CS)<<0);
 }
 
-void lcd_init() {
+void lcd_init(void) {
 	//Delay_Ms(10); // Wait for power to stabalize (LCD recommends >1ms); Commented out because the card initializaton takes at least 10ms, which's enough.
 	// Set LCD CS DC to LOW, also toggle LCD RES pin (first set it to LOW, then set it to HIGH)
 	GPIOC->BSHR = (((1<<PIN_LCD_RES)|(1<<PIN_LCD_CS)|(1<<PIN_LCD_DC))<<16);
