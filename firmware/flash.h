@@ -25,23 +25,29 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdint.h>
-#include <stddef.h>
 
-int util_print_button_buffer(char *dest, uint16_t buttons) {
-	int ret = 0;
-	for(size_t i=0; i<16; i++) {
-		if(buttons & (1<<i)) {
-			if(i < 10) {
-				dest[ret++] = i + '0';
-			} else {
-				dest[ret++] = i - 10 + 'A';
-			}
-		}
-	}
-	dest[ret] = '\0';
-	return ret;
-}
+// Flash layout:
+// Usable flash area: [0x0800E000,0x0800F800)
+// Reserved: [0x0800E000,0x0800E400)
+// Global config: [0x0800E400,0x0800E800)
+// Boot rom: [0x0800E800,0x0800F800)
 
-void __assert_func(const char*, int, const char*, const char*) {
-	while(1);
-}
+#define FLASH_PAGE_SIZE (256)
+
+#define FLASH_CONFIG_START (0x800E400) // Inclusive
+#define FLASH_CONFIG_END (0x0800E800) // Exclusive
+
+// Information required:
+// Metadata (checksum)
+// All config fields
+// ROM content
+#define FLASH_BOOT_ROM_INI_START (0x0800E800) // Inclusive
+#define FLASH_BOOT_ROM_INI_END (0x800EA00) // Exclusive
+#define FLASH_BOOT_ROM_CH8_START (0x800EA00) // Inclusive
+#define FLASH_BOOT_ROM_CH8_END (0x0800F800) // Exclusive
+
+void flash_unlock(void);
+void flash_lock(void);
+void flash_erase_256(uint32_t offset); // Erase 256 bytes
+void flash_write_256(uint32_t offset, const void *data); // Write 256 bytes
+void flash_write_4(uint32_t offset, const uint32_t data); // Write 4 bytes

@@ -341,6 +341,7 @@ uint8_t file_load_config(const char *path, struct chip8_config *chip8_cfg) {
 	memset(&ini_parser, 0, sizeof(ini_parser));
 	ini_parser.output_cfg = chip8_cfg;
 	memcpy(chip8_cfg, &CHIP8_CFG_DEFAULT, sizeof(struct chip8_config));
+	chip8_cfg->version = CHIP8_CFG_VERSION;
 
 	ret = f_open(&fil, path, FA_READ);
 	if(ret == FR_OK) {

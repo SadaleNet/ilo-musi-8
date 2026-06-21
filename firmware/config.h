@@ -25,23 +25,28 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdint.h>
-#include <stddef.h>
 
-int util_print_button_buffer(char *dest, uint16_t buttons) {
-	int ret = 0;
-	for(size_t i=0; i<16; i++) {
-		if(buttons & (1<<i)) {
-			if(i < 10) {
-				dest[ret++] = i + '0';
-			} else {
-				dest[ret++] = i - 10 + 'A';
-			}
-		}
-	}
-	dest[ret] = '\0';
-	return ret;
-}
+#define GLOBAL_CONFIG_VERSION (0)
 
-void __assert_func(const char*, int, const char*, const char*) {
-	while(1);
-}
+// This struct must be exactly 32bit
+struct __attribute__((packed)) global_config {
+	uint8_t version:4; // To update the struct, you can only append content to the end and then increment the version
+	uint8_t volume:4;
+	uint8_t backlight:4;
+	uint8_t contrast:4;
+	uint8_t language:2;
+	uint8_t reserved:6;
+	uint8_t checksum:8; // Initialize with 0xAA. XOR byte-by-byte
+};
+
+// Storage mechanism:
+// 1kB of space between FLASH_CONFIG_START and FLASH_CONFIG_END is allocated for global config storage with wear-leveling implemented.
+// The 1kB flash space is divided into 256 slots, each slot is 32bit wide. Each flash page has 256 bytes (i.e. 64 slots)
+// At first, all pages are empty (filled with 0xFF). Upon first save, the config would be save into the first slot.
+// The second save would be stored into the second slot and so on.
+// When the first page is filled, the beginning of the second page would be written.
+// When the final page is filled, the first page would be erased, and first slot got written. then all pages except for the first one would be erased
+
+void config_load(struct global_config *config);
+bool config_save(const struct global_config *config); // returns true on success, false on error
+void config_test(void);

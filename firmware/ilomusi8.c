@@ -29,6 +29,7 @@
 
 #include "adc.h"
 #include "buzzer.h"
+#include "config.h"
 #include "draw.h"
 #include "file.h"
 #include "lcd.h"
@@ -61,7 +62,6 @@ extern const uint8_t ICON_ACTION[];
 extern const size_t ICON_ACTION_LENGTH;
 extern const uint8_t ICON_UPDIR[];
 extern const size_t ICON_UPDIR_LENGTH;
-
 
 enum screen_state {
 	SCREEN_ERROR, // File IO Error Screen
@@ -133,7 +133,7 @@ static void directory_up(char *directory_str) {
 
 // Shared by all screens
 enum screen_state screen_state;
-uint8_t buzzer_volume;
+struct global_config global_config;
 uint32_t systick_now;
 
 // Shared by all screens except for SCREEN_GAMEPLAY
@@ -655,7 +655,7 @@ static void screen_gameplay_handler(void) {
 		chip8.periph.key_just_released = (uint16_t)chip8_keymap(adc_button_get_just_released());
 		if(!(chip8.periph.requests & CHIP8_REQUEST_WAIT_DISPLAY_REFRESH)) {
 			chip8_step(&chip8);
-			buzzer_set_volume(chip8.periph.sound_timer > 0 ? buzzer_volume : 0);
+			buzzer_set_volume(chip8.periph.sound_timer > 0 ? global_config.volume : 0);
 			if(chip8.periph.requests & CHIP8_REQUEST_AUDIO_BUFFER_UPDATED) {
 				buzzer_set_buffer(chip8.periph.audio);
 				chip8.periph.requests &= ~CHIP8_REQUEST_AUDIO_BUFFER_UPDATED;
@@ -695,7 +695,7 @@ static void screen_gameplay_handler(void) {
 
 	if(systick_now - last_lcd_blit_tick >= FUNCONF_SYSTEM_CORE_CLOCK/60) { // 60fps
 		chip8_timer_step(&chip8);
-		buzzer_set_volume(chip8.periph.sound_timer > 0 ? buzzer_volume : 0);
+		buzzer_set_volume(chip8.periph.sound_timer > 0 ? global_config.volume : 0);
 		// There's no double-buffering for saving 1kB of RAM.
 		// There still won't be tearing because the LCD's response time
 		// is slow enough to have any tearing visible
@@ -819,9 +819,11 @@ int main() {
 	spi_set_mode(SPI_MODE_LCD);
 	lcd_init_second_stage(); // If card's inserted, must be done after spi_card_mount_filesystem()
 
-	lcd_set_brightness(9);
+	config_load(&global_config);
 
-	buzzer_volume = 15; // Just make up a value for testing
+	lcd_set_brightness(global_config.backlight);
+	lcd_set_contrast(0x18+global_config.contrast*2);
+
 	buzzer_set_volume(0); // Always use buzzer volume of 0 at the beginning
 
 	watchdog_feed();
@@ -857,6 +859,7 @@ int main() {
 	game_min_cycle_interval = 0;
 	last_frame_processed_tick = SysTick->CNT;
 	last_lcd_blit_tick = SysTick->CNT;
+
 	while(1) {
 		file_loop();
 
