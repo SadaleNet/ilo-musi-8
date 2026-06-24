@@ -35,17 +35,19 @@ struct __attribute__((packed)) global_config {
 	uint8_t backlight:4;
 	uint8_t contrast:4;
 	uint8_t language:2;
-	uint8_t reserved:6;
-	uint8_t checksum:8; // Initialize with 0xAA. XOR byte-by-byte
+	uint16_t reserved:14;
 };
 
 // Storage mechanism:
-// 1kB of space between FLASH_CONFIG_START and FLASH_CONFIG_END is allocated for global config storage with wear-leveling implemented.
-// The 1kB flash space is divided into 256 slots, each slot is 32bit wide. Each flash page has 256 bytes (i.e. 64 slots)
-// At first, all pages are empty (filled with 0xFF). Upon first save, the config would be save into the first slot.
-// The second save would be stored into the second slot and so on.
-// When the first page is filled, the beginning of the second page would be written.
-// When the final page is filled, the first page would be erased, and first slot got written. then all pages except for the first one would be erased
+// 2kB of space between FLASH_CONFIG_START and FLASH_CONFIG_END is allocated for global config storage with wear-leveling implemented.
+// Due to the limitation of CH32V006, I can only perform self-flashing of 256 bytes at once.
+// The customer support had confirmed that it isn't recommended to program part of the 256 bytes, then program the other part and so on.
+// Therefore, the smallest writing unit is a page (256 bytes)
+// The 2kB page would contain 8 pages. When config is stored, the first page got written.
+// The page content contains identical 4 bytes written 64 times.
+// There's no checksum. If the same content got read 8 times and that it ain't FFFFFFFF, it's assumed to be correct
+// Next time it's stored, the second page got written. The next time, the third page and so on.
+// When the final page is filled, the first page would be erased, and first page got written. then all pages except for the first one would be erased
 
 void config_load(struct global_config *config);
 bool config_save(const struct global_config *config); // returns true on success, false on error

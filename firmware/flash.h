@@ -28,13 +28,12 @@
 
 // Flash layout:
 // Usable flash area: [0x0800E000,0x0800F800)
-// Reserved: [0x0800E000,0x0800E400)
-// Global config: [0x0800E400,0x0800E800)
+// Global config: [0x0800E000,0x0800E800)
 // Boot rom: [0x0800E800,0x0800F800)
 
 #define FLASH_PAGE_SIZE (256)
 
-#define FLASH_CONFIG_START (0x800E400) // Inclusive
+#define FLASH_CONFIG_START (0x800E000) // Inclusive
 #define FLASH_CONFIG_END (0x0800E800) // Exclusive
 
 // Information required:
@@ -48,6 +47,8 @@
 
 void flash_unlock(void);
 void flash_lock(void);
+
+// According to the customer support of CH32V006, after erasing a page, you can only write the page once
 void flash_erase_256(uint32_t offset); // Erase 256 bytes
-void flash_write_256(uint32_t offset, const void *data); // Write 256 bytes
-void flash_write_4(uint32_t offset, const uint32_t data); // Write 4 bytes
+void flash_write_256(uint32_t offset, const void *data); // Write 256 bytes. Do not call more than once after an erase.
+void flash_write_4x64(uint32_t offset, const uint32_t data); // Write 4 bytes repeatedly. Do not call more than once after an erase.

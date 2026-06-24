@@ -27,7 +27,6 @@
 #include "flash.h"
 #include "ch32fun.h"
 #include <assert.h>
-#include <stdio.h> // TODO: remove
 
 void flash_unlock(void) {
 	if(FLASH->CTLR & FLASH_CTLR_LOCK) {
@@ -47,18 +46,6 @@ void flash_lock(void) {
 void flash_erase_256(uint32_t offset) {
 	assert(offset%FLASH_PAGE_SIZE == 0 && offset >= FLASH_CONFIG_START && offset < FLASH_CONFIG_END);
 
-	bool already_erased = true;
-	for(uint32_t addr=offset; addr<offset+FLASH_PAGE_SIZE; addr+=sizeof(uint32_t)) {
-		if(*((volatile uint32_t*)addr) != 0xFFFFFFFF) {
-			already_erased = false;
-			break;
-		}
-	}
-	if(already_erased) {
-		// The content was already empty. No need to erase again
-		return;
-	}
-
 	// Perform fast erase
 	while(FLASH->STATR & FLASH_STATR_BSY){}
 	FLASH->CTLR |= FLASH_CTLR_PAGE_FTER;
@@ -68,7 +55,7 @@ void flash_erase_256(uint32_t offset) {
 	FLASH->STATR |= FLASH_STATR_EOP; // Clear EOP
 	FLASH->CTLR &= ~FLASH_CTLR_PAGE_FTER;
 }
-
+#include <stdio.h>
 void flash_write_256(uint32_t offset, const void *data) {
 	assert(offset%FLASH_PAGE_SIZE == 0 && offset >= FLASH_CONFIG_START && offset < FLASH_CONFIG_END);
 
@@ -79,7 +66,7 @@ void flash_write_256(uint32_t offset, const void *data) {
 	while(!(FLASH->STATR & FLASH_STATR_EOP)){}
 	FLASH->STATR |= FLASH_STATR_EOP; // Clear EOP
 	for(uint32_t i=0; i<FLASH_PAGE_SIZE; i+=sizeof(uint32_t)) {
-		*((volatile uint32_t*)(offset+i)) = *((uint32_t*)(data+i));
+		*((volatile uint32_t*)(offset+i)) = *(uint32_t*)((size_t)data+i);
 		FLASH->CTLR |= FLASH_CTLR_BUF_LOAD;
 		while(FLASH->STATR & FLASH_STATR_BSY){}
 	}
@@ -90,10 +77,9 @@ void flash_write_256(uint32_t offset, const void *data) {
 	FLASH->CTLR &= ~FLASH_CTLR_PAGE_FTPG;
 }
 
-void flash_write_4(uint32_t offset, const uint32_t data) {
-	assert(offset%4 == 0 && offset >= FLASH_CONFIG_START && offset < FLASH_CONFIG_END);
+void flash_write_4x64(uint32_t offset, const uint32_t data) {
+	assert(offset%FLASH_PAGE_SIZE == 0 && offset >= FLASH_CONFIG_START && offset < FLASH_CONFIG_END);
 
-	uint32_t page_offset = offset/FLASH_PAGE_SIZE*FLASH_PAGE_SIZE;
 	// Perform fast programming
 	while(FLASH->STATR & FLASH_STATR_BSY){}
 	FLASH->CTLR |= FLASH_CTLR_PAGE_FTPG;
@@ -101,21 +87,13 @@ void flash_write_4(uint32_t offset, const uint32_t data) {
 	while(!(FLASH->STATR & FLASH_STATR_EOP)){}
 	FLASH->STATR |= FLASH_STATR_EOP; // Clear EOP
 	for(uint32_t i=0; i<FLASH_PAGE_SIZE; i+=sizeof(uint32_t)) {
-		if(i == offset%FLASH_PAGE_SIZE) {
-			// Only program the specified offset
-			*((volatile uint32_t*)(page_offset+i)) = data;
-		} else {
-			// Retain the content for the non-specified offset
-			// Due to the nature of flash memory, it can only be programmed from 1->0, not 0->1
-			// Therefore, by programming 0xFFFFFFFF, the content would be unchanged.
-			*((volatile uint32_t*)(page_offset+i)) = 0xFFFFFFFF;
-		}
+		*((volatile uint32_t*)(offset+i)) = data;
 		FLASH->CTLR |= FLASH_CTLR_BUF_LOAD;
 		while(FLASH->STATR & FLASH_STATR_BSY){}
 	}
-	FLASH->ADDR = page_offset;
+	FLASH->ADDR = offset;
 	FLASH->CTLR |= FLASH_CTLR_STRT;
 	while(!(FLASH->STATR & FLASH_STATR_EOP)){}
-	FLASH->STATR |= FLASH_STATR_EOP; // Clear OP
+	FLASH->STATR |= FLASH_STATR_EOP; // Clear EOP
 	FLASH->CTLR &= ~FLASH_CTLR_PAGE_FTPG;
 }

@@ -26,7 +26,7 @@
 
 #include "config.h"
 #include "flash.h"
-#include "ch32fun.h" // TODO: remove
+#include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
@@ -38,17 +38,7 @@ const struct global_config GLOBAL_CONFIG_DEFAULT = {
 	.backlight = 7,
 	.contrast = 3,
 	.language = 0,
-	.checksum = 0, // Does not need a valid checksum. Computed upon config save.
 };
-
-
-static uint8_t config_calculate_checksum(const struct global_config *config) {
-	uint8_t ret = 0xAA;
-	for(size_t i=0; i<sizeof(struct global_config); i++) {
-		ret ^= ((const uint8_t*)config)[i];
-	}
-	return ret;
-}
 
 static bool config_validate(const struct global_config *config) {
 	return true;
@@ -60,29 +50,31 @@ static bool config_validate(const struct global_config *config) {
 	);*/ // TODO: determine the exact range I need
 }
 
-static bool config_verify_config_slot(uint32_t start_offset, const struct global_config *config) {
-	if(*((volatile uint32_t*)start_offset) != *(uint32_t*)config) {
-		return false;
-	}
-	for(uint32_t addr=start_offset+4; start_offset<FLASH_CONFIG_END; start_offset+=sizeof(uint32_t)) {
-		if(*((volatile uint32_t*)addr) != 0xFFFFFFFF) {
-			return false;
-		}
-	}
-	return true;
-}
-
 static uint32_t config_to_uint32(const void *config) {
 	return *(uint32_t*)config;
 }
 
 void config_load(struct global_config *config) {
+	assert(sizeof(struct global_config) == sizeof(uint32_t));
+
 	// Look for a proper config backward from the end of the storage area to its beginning
+	const size_t IDENTICAL_REQUIREMENT = 4;
+	size_t identical_config_counter = 0; // Only take the config after reading the same one several times.
+	memset(config, 0xFF, sizeof(struct global_config));
 	for(uint32_t addr=FLASH_CONFIG_END-sizeof(uint32_t); addr>=FLASH_CONFIG_START; addr-=sizeof(uint32_t)) {
-		*config = *((struct global_config*)((volatile uint32_t*)addr));
-		if(config_calculate_checksum(config) == config->checksum && config_validate(config)) {
-			// Found a proper config. We're done!
-			return;
+		uint32_t data = *(volatile uint32_t*)addr;
+		if(data == 0xFFFFFFFF) {
+			// Skip the special value 0xFFFFFFFF because it's the value we get for an erased page
+			identical_config_counter = 0;
+			continue;
+		} else if(*(uint32_t*)config != data) {
+			identical_config_counter = 1;
+			memcpy(config, &data, sizeof(struct global_config));
+		} else {
+			if(++identical_config_counter >= IDENTICAL_REQUIREMENT && config_validate(config)) {
+				// Found a proper config. We're done!
+				return;
+			}
 		}
 	}
 	// A proper config hasn't been found in flash
@@ -94,7 +86,6 @@ bool config_save(const struct global_config *config) {
 	struct global_config old_config, new_config;
 	config_load(&old_config);
 	new_config = *config;
-	new_config.checksum = config_calculate_checksum(config);
 
 	if(!config_validate(&new_config)) {
 		// Config validation error. Report error. Not saving to flash.
@@ -106,42 +97,46 @@ bool config_save(const struct global_config *config) {
 		return true;
 	}
 
-	// Look for the last empty config slot by searching backward from the end of the storage area to its beginning
-	uint32_t addr;
-	for(addr=FLASH_CONFIG_END-sizeof(uint32_t); addr>=FLASH_CONFIG_START; addr-=sizeof(uint32_t)) {
-		if(*((volatile uint32_t*)addr) != 0xFFFFFFFF) {
-			break; // Obtained last non-empty address
+	// Look for the last empty page by searching backward from the end of the storage area to its beginning
+	uint32_t page_addr;
+	for(page_addr=FLASH_CONFIG_END-FLASH_PAGE_SIZE; page_addr>=FLASH_CONFIG_START; page_addr-=FLASH_PAGE_SIZE) {
+		bool page_empty = true;
+		for(uint32_t addr=page_addr; addr<page_addr+FLASH_PAGE_SIZE; addr+=sizeof(uint32_t)) {
+			if(*((volatile uint32_t*)addr) != 0xFFFFFFFF) {
+				page_empty = false;
+				break;
+			}
+		}
+		if(!page_empty) {
+			// Obtained last non-empty page!
+			break;
 		}
 	}
-	addr += sizeof(uint32_t); // Add 4 to obtain the last empty address
-	printf("%08lX %08lX %08lX %08lX\n", addr, FLASH->STATR, FLASH->CTLR, FLASH->ACTLR);
+	page_addr += FLASH_PAGE_SIZE; // Add FLASH_PAGE_SIZE to obtain the last empty page address
 
 	// Write the config to flash
 	flash_unlock();
-	if(addr >= FLASH_CONFIG_END) {
+	if(page_addr >= FLASH_CONFIG_END) {
 		// All pages filled
 		// Erase the first page and fill in the first slot
-		addr = FLASH_CONFIG_START;
-		flash_erase_256(addr);
-		flash_write_4(addr, config_to_uint32(&new_config));
+		page_addr = FLASH_CONFIG_START;
+		flash_erase_256(page_addr);
+		flash_write_4x64(page_addr, config_to_uint32(&new_config));
 
 		// Erase the remaining pages
-		for(uint32_t addr=FLASH_CONFIG_START+FLASH_PAGE_SIZE; addr<FLASH_CONFIG_END; addr+=FLASH_PAGE_SIZE) {
-			flash_erase_256(addr);
+		for(uint32_t page_addr=FLASH_CONFIG_START+FLASH_PAGE_SIZE; page_addr<FLASH_CONFIG_END; page_addr+=FLASH_PAGE_SIZE) {
+			flash_erase_256(page_addr);
 		}
 	} else {
-		flash_write_4(addr, config_to_uint32(&new_config));
+		flash_write_4x64(page_addr, config_to_uint32(&new_config));
 	}
 	flash_lock();
 
-	// Verify flash content
-	if(!config_verify_config_slot(addr, &new_config)) {
-		return false;
-	}
 	return true;
 }
 
 static void config_dump(void) {
+	printf("===CONFIG DUMP===\n");
 	for(uint32_t addr=FLASH_CONFIG_START; addr<FLASH_CONFIG_END; addr+=sizeof(uint32_t)) {
 		printf("%08lX ", *((volatile uint32_t*)addr));
 		if(addr%64 == 64-sizeof(uint32_t)) {
@@ -154,6 +149,51 @@ static void config_dump(void) {
 }
 
 void config_test(void) {
-	config_save(&GLOBAL_CONFIG_DEFAULT);
+	static struct global_config cfg = GLOBAL_CONFIG_DEFAULT;
+	cfg.volume = (cfg.volume+1)%8;
+	cfg.backlight = (cfg.backlight+3)%8;
+	cfg.contrast = (cfg.contrast+5)%8;
+	cfg.language = (cfg.language+1)%4;
+	config_save(&cfg);
 	config_dump();
+
+	printf("Verification result: ");
+	static struct global_config cfg2;
+	config_load(&cfg2);
+	if(memcmp(&cfg, &cfg2, sizeof(cfg))) {
+		printf("FAIL | ");
+	} else {
+		printf("OK | ");
+	}
+
+	// The first kind of corruption should print "SAME". The second kind should print "DIFFERENT"
+	uint32_t flash_corrupt[64] =
+	//{0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF,};
+	{0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF,};
+	config_load(&cfg2);
+
+	uint32_t page_addr;
+	for(page_addr=FLASH_CONFIG_END-FLASH_PAGE_SIZE; page_addr>=FLASH_CONFIG_START; page_addr-=FLASH_PAGE_SIZE) {
+		bool page_empty = true;
+		for(uint32_t addr=page_addr; addr<page_addr+FLASH_PAGE_SIZE; addr+=sizeof(uint32_t)) {
+			if(*((volatile uint32_t*)addr) != 0xFFFFFFFF) {
+				page_empty = false;
+				break;
+			}
+		}
+		if(!page_empty) {
+			// Obtained last non-empty page!
+			break;
+		}
+	}
+	flash_unlock();
+	flash_write_256(page_addr, flash_corrupt);
+	flash_lock();
+	config_load(&cfg2);
+	if(memcmp(&cfg, &cfg2, sizeof(cfg))) {
+		printf("DIFFERENT");
+	} else {
+		printf("SAME");
+	}
+	printf("\n");
 }
