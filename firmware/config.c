@@ -41,13 +41,12 @@ const struct global_config GLOBAL_CONFIG_DEFAULT = {
 };
 
 static bool config_validate(const struct global_config *config) {
-	return true;
-	/*return (
-		config->volume <= 7 &&
-		config->backlight <= 7 &&
-		config->constrast <= 7 &&
-		config->language <= 3
-	);*/ // TODO: determine the exact range I need
+	return (
+		config->volume < GLOBAL_CONFIG_MAX_VALUE &&
+		config->backlight < GLOBAL_CONFIG_MAX_VALUE &&
+		config->contrast < GLOBAL_CONFIG_MAX_VALUE &&
+		config->language < LANG_COUNT
+	);
 }
 
 static uint32_t config_to_uint32(const void *config) {

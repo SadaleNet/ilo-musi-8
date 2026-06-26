@@ -27,6 +27,15 @@
 #include <stdint.h>
 
 #define GLOBAL_CONFIG_VERSION (0)
+#define GLOBAL_CONFIG_MAX_VALUE (10) // Exclusive. Valid value is between 0~MAX_VALUE-1. Shared by volume, backlight and contrast
+
+enum CONFIG_LANG {
+	LANG_EN,
+	LANG_TOK,
+	LANG_SP,
+	LANG_QSS,
+	LANG_COUNT,
+};
 
 // This struct must be exactly 32bit
 struct __attribute__((packed)) global_config {

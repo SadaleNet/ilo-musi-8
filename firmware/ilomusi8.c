@@ -44,10 +44,6 @@
 #include <string.h>
 #include <assert.h>
 
-#define CHIP8_QUIRK_PLATFORM_VIP (CHIP8_QUIRK_VBLANK|CHIP8_QUIRK_LOGIC) // 0x00000060
-#define CHIP8_QUIRK_PLATFORM_SCHIP (CHIP8_QUIRK_SHIFT|CHIP8_QUIRK_MEMORY_LEAVE_I_UNCHANGED|CHIP8_QUIRK_JUMP|CHIP8_QUIRK_HIRES_COLLISION)  // 0x00000413
-#define CHIP8_QUIRK_PLATFORM_OCTO (CHIP8_QUIRK_WRAP|CHIP8_QUIRK_LORES_WIDE_SPRITE|CHIP8_QUIRK_RESIZE_CLEAR_SCREEN) // 0x00000888
-
 #define GAMEPLAY_INSTRUCTION_DURATION_MS (5000U) // Show gameplay instruction for x seconds
 
 extern const uint8_t ICON_NAVIGATION[];
@@ -81,6 +77,15 @@ enum game_config_selection {
 	GAME_CONFIG_QUIRKS_CUSTOM,
 	GAME_CONFIG_SPEED,
 	GAME_CONFIG_BOOT_ROM,
+};
+
+enum global_config_selection {
+	GLOBAL_CONFIG_MAIN,
+	GLOBAL_CONFIG_VOLUME,
+	GLOBAL_CONFIG_BACKLIGHT,
+	GLOBAL_CONFIG_CONTRAST,
+	GLOBAL_CONFIG_LANGUAGE,
+	GLOBAL_CONFIG_BOOT_ROM,
 };
 
 static struct chip8_machine chip8;
@@ -134,6 +139,7 @@ static void directory_up(char *directory_str) {
 // Shared by all screens
 enum screen_state screen_state;
 struct global_config global_config;
+struct global_config global_config_backup;
 uint32_t systick_now;
 
 // Shared by all screens except for SCREEN_GAMEPLAY
@@ -151,6 +157,11 @@ bool menu_dir_reload_required;
 enum game_config_selection game_config_selection;
 uint8_t game_config_index;
 uint32_t game_config_old_value;
+
+// For SCREEN_GLOBAL_CONFIG
+enum global_config_selection global_config_selection;
+uint32_t global_config_old_value;
+uint32_t global_config_buzzer_start_tick;
 
 // For SCREEN_GAMEPLAY
 uint8_t last_storage_flag[sizeof(chip8_cfg->storage_flags)/sizeof(*chip8_cfg->storage_flags)]; // storage flag state upon game launch
@@ -176,6 +187,33 @@ static void get_rid_of_all_button_events(void) {
 	adc_button_get_just_released();
 }
 
+static void apply_volume(void) {
+	assert(global_config.volume < GLOBAL_CONFIG_MAX_VALUE);
+	static const uint8_t VOLUME_MAP[GLOBAL_CONFIG_MAX_VALUE] = {0, 1, 2, 4, 6, 8, 10, 12, 14, 15};
+	buzzer_set_volume(VOLUME_MAP[global_config.volume]);
+}
+
+static void apply_volume_with_feedback_sound(void) {
+	static const uint8_t FEEDBACK_AUDIO_SAMPLE[] = CHIP8_DEFAULT_AUDIO_SAMPLE;
+
+	buzzer_set_pitch(CHIP8_DEFAULT_AUDIO_PITCH);
+	buzzer_set_buffer(FEEDBACK_AUDIO_SAMPLE);
+	apply_volume();
+	global_config_buzzer_start_tick = systick_now;
+}
+
+static void apply_brightness(void) {
+	assert(global_config.backlight < GLOBAL_CONFIG_MAX_VALUE);
+	static const uint8_t BRIGHTNESS_MAP[GLOBAL_CONFIG_MAX_VALUE] = {0, 3, 4, 5, 6, 7, 8, 10, 12, 15};
+	lcd_set_brightness(BRIGHTNESS_MAP[global_config.backlight]);
+}
+
+static void apply_contrast(void) {
+	assert(global_config.contrast < GLOBAL_CONFIG_MAX_VALUE);
+	static const uint8_t CONTRAST_MAP[GLOBAL_CONFIG_MAX_VALUE] = {0x18, 0x1A, 0x1C, 0x1E, 0x20, 0x22, 0x24, 0x26, 0x28, 0x2A};
+	lcd_set_contrast(CONTRAST_MAP[global_config.contrast]);
+}
+
 static void screen_error_handler(void) {
 	uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
 	if(button_press & (1<<0x10)) {
@@ -183,8 +221,15 @@ static void screen_error_handler(void) {
 		menu_offset = 0;
 		menu_dir_reload_required = true;
 		screen_state = SCREEN_MENU;
+	} else if((button_press & (1<<0xD))) { // Allows visiting global config screen with D button even with card error
+		screen_state = SCREEN_GLOBAL_CONFIG;
+		menu_display_update_required = true;
+	}
+
+	if(screen_state != SCREEN_ERROR) {
 		return;
 	}
+
 	if(menu_display_update_required) {
 		draw_clear(chip8.periph.display);
 		draw_text(chip8.periph.display, "XXXXXXXXXXXXXXXXXXXXX", 0, 0);
@@ -228,8 +273,11 @@ static void screen_menu_handler(void) {
 	int menu_offset_prev = menu_offset;
 	uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
 	size_t menu_offset_on_current_page = menu_offset%MENU_PAGE_SIZE;
-	if((button_press & (1<<0xC)) && menu_file_count_of_current_page > 0) { // The C button. Only usable for non-empty directories
-		if(strlen(menu_file_list[menu_offset_on_current_page]) > 0 && menu_file_list[menu_offset_on_current_page][strlen(menu_file_list[menu_offset_on_current_page])-1] != '/') {
+	if((button_press & (1<<0xC))) { // The C button
+		if(menu_file_count_of_current_page > 0 && // Only usable inside non-empty directories
+		strlen(menu_file_list[menu_offset_on_current_page]) > 0 && // Boundary check for the next condition
+		menu_file_list[menu_offset_on_current_page][strlen(menu_file_list[menu_offset_on_current_page])-1] != '/'  // Only usable if the selected item isn't a directory
+		) {
 			// Load the INI file into chip8_cfg, then restore menu_current_dir's content
 			directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
 			memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "INI", 3);
@@ -238,8 +286,11 @@ static void screen_menu_handler(void) {
 			// Head to the game config screen
 			screen_state = (file_io_result == FR_OK) ? SCREEN_GAME_CONFIG : SCREEN_ERROR;
 			menu_display_update_required = true;
-			return;
 		}
+	} else if((button_press & (1<<0xD))) { // The D button
+		memcpy(&global_config_backup, &global_config, sizeof(global_config_backup));
+		screen_state = SCREEN_GLOBAL_CONFIG;
+		menu_display_update_required = true;
 	} else if((button_press & (1<<0xF)) && menu_file_count_of_current_page > 0) { // The F button. Only usable for non-empty directories
 		// Attach the filename to the current menu_current_dir
 		directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
@@ -293,9 +344,6 @@ static void screen_menu_handler(void) {
 				}
 			}
 			directory_remove_filename(menu_current_dir);
-			if(screen_state != SCREEN_MENU) {
-				return;
-			}
 		}
 	} else if(button_press & (1<<0x10)) { // The X button
 		// Up a directory
@@ -308,6 +356,9 @@ static void screen_menu_handler(void) {
 		if(button_press & (1<<8)) { menu_offset++; }
 		if(button_press & (1<<4)) { menu_offset -= 10; }
 		if(button_press & (1<<6)) { menu_offset += 10; }
+	}
+	if(screen_state != SCREEN_MENU) {
+		return;
 	}
 
 	if(menu_offset < 0) {
@@ -521,7 +572,7 @@ static void screen_game_config_handler(void) {
 		draw_text(chip8.periph.display, menu_file_list[menu_offset%MENU_PAGE_SIZE], 42, 0);
 
 		draw_text(chip8.periph.display, "QUIRKS.....", 12, 14);
-			draw_text(chip8.periph.display, "SPEED LIMIT......", 12, 23);
+		draw_text(chip8.periph.display, "SPEED LIMIT......", 12, 23);
 		draw_text(chip8.periph.display, "USE AS BOOT ROM", 12, 32);
 
 		if(game_config_selection == GAME_CONFIG_QUIRKS_CUSTOM) {
@@ -569,28 +620,28 @@ static void screen_game_config_handler(void) {
 				draw_text(chip8.periph.display, "A)", 0, 14);
 				draw_text(chip8.periph.display, "B)", 0, 23);
 				draw_text(chip8.periph.display, "C)", 0, 32);
-				draw_text(chip8.periph.display, "F)SAVE", 0, 48);
-				draw_text(chip8.periph.display, "X)CANCEL", 0, 57);
+				draw_text(chip8.periph.display, "F)SAVE", 0, 47);
+				draw_text(chip8.periph.display, "X)CANCEL", 0, 56);
 			break;
 			case GAME_CONFIG_QUIRKS:
 				draw_text(chip8.periph.display, "=>", 0, 14);
-				draw_text(chip8.periph.display, "1)VIP 2)SCHIP 3)OCTO", 0, 48);
-				draw_text(chip8.periph.display, "4)CUSTOM X)CANCEL", 0, 57);
+				draw_text(chip8.periph.display, "1)VIP 2)SCHIP 3)OCTO", 0, 47);
+				draw_text(chip8.periph.display, "4)CUSTOM X)CANCEL", 0, 56);
 			break;
 			case GAME_CONFIG_QUIRKS_CUSTOM:
 				draw_text(chip8.periph.display, "=>", 0, 14);
-				draw_text(chip8.periph.display, "0-F)TYPE HEX", 0, 48);
-				draw_text(chip8.periph.display, "X)CANCEL", 0, 57);
+				draw_text(chip8.periph.display, "0-F)TYPE HEX", 0, 47);
+				draw_text(chip8.periph.display, "X)CANCEL", 0, 56);
 			break;
 			case GAME_CONFIG_SPEED:
 				draw_text(chip8.periph.display, "=>", 0, 23);
-				draw_text(chip8.periph.display, "0-9)TYPE DIGITS", 0, 48);
-				draw_text(chip8.periph.display, "X)CANCEL", 0, 57);
+				draw_text(chip8.periph.display, "0-9)TYPE DIGITS", 0, 47);
+				draw_text(chip8.periph.display, "X)CANCEL", 0, 56);
 			break;
 			case GAME_CONFIG_BOOT_ROM:
 				draw_text(chip8.periph.display, "=>", 0, 32);
-				draw_text(chip8.periph.display, "F)OVERWRITE BOOT ROM", 0, 48);
-				draw_text(chip8.periph.display, "X)CANCEL", 0, 57);
+				draw_text(chip8.periph.display, "F)OVERWRITE BOOT ROM", 0, 47);
+				draw_text(chip8.periph.display, "X)CANCEL", 0, 56);
 			break;
 		}
 		lcd_transfer_begin(chip8.periph.display);
@@ -599,7 +650,176 @@ static void screen_game_config_handler(void) {
 }
 
 static void screen_global_config_handler(void) {
-	// TODO: Unimplemented
+	uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
+	switch(global_config_selection) {
+		case GLOBAL_CONFIG_MAIN:
+			if(button_press & (1<<0xA)) { // The A button
+				global_config_selection = GLOBAL_CONFIG_VOLUME;
+				global_config_old_value = global_config.volume;
+				menu_display_update_required = true;
+			} else if(button_press & (1<<0xB)) { // The B button
+				global_config_selection = GLOBAL_CONFIG_BACKLIGHT;
+				global_config_old_value = global_config.backlight;
+				menu_display_update_required = true;
+			} else if(button_press & (1<<0xC)) { // The C button
+				global_config_selection = GLOBAL_CONFIG_CONTRAST;
+				global_config_old_value = global_config.contrast;
+				menu_display_update_required = true;
+			} else if(button_press & (1<<0xD)) { // The D button
+				global_config_selection = GLOBAL_CONFIG_LANGUAGE;
+				menu_display_update_required = true;
+			} else if(button_press & (1<<0xE)) { // The E button
+				global_config_selection = GLOBAL_CONFIG_BOOT_ROM;
+				menu_display_update_required = true;
+			} else if(button_press & (1<<0xF)) { // The F button
+				config_save(&global_config);
+				screen_state = SCREEN_MENU;
+				menu_display_update_required = true;
+			} else if(button_press & (1<<0x10)) { // The X button
+				// Revert to original global config
+				memcpy(&global_config, &global_config_backup, sizeof(global_config));
+				apply_volume();
+				apply_brightness();
+				apply_contrast();
+				screen_state = SCREEN_MENU;
+				menu_display_update_required = true;
+			}
+		break;
+		// Shared by GLOBAL_CONFIG_VOLUME, GLOBAL_CONFIG_BACKLIGHT, GLOBAL_CONFIG_CONTRAST
+		// Cannot be defined as a function because we're operating on a struct bitfield
+		#define ADJUSTMENT_HANDLER(FIELD, CONFIG_ADJUSTED_HANDLER) \
+			if(button_press & (1<<0x4)) { \
+				if(FIELD > 0) { \
+					FIELD--; \
+					CONFIG_ADJUSTED_HANDLER(); \
+					menu_display_update_required = true; \
+				} \
+			} if(button_press & (1<<0x6)) { \
+				if(FIELD < GLOBAL_CONFIG_MAX_VALUE-1) { \
+					FIELD++; \
+					CONFIG_ADJUSTED_HANDLER(); \
+					menu_display_update_required = true; \
+				} \
+			} else if(button_press & (1<<0xF)) { \
+				global_config_selection = GLOBAL_CONFIG_MAIN; \
+				menu_display_update_required = true; \
+			} else if(button_press & (1<<0x10)) { \
+				global_config_selection = GLOBAL_CONFIG_MAIN; \
+				FIELD = global_config_old_value; \
+				CONFIG_ADJUSTED_HANDLER(); \
+				menu_display_update_required = true; \
+			}
+		case GLOBAL_CONFIG_VOLUME:
+			ADJUSTMENT_HANDLER(global_config.volume, apply_volume_with_feedback_sound);
+		break;
+		case GLOBAL_CONFIG_BACKLIGHT:
+			ADJUSTMENT_HANDLER(global_config.backlight, apply_brightness);
+		break;
+		case GLOBAL_CONFIG_CONTRAST:
+			ADJUSTMENT_HANDLER(global_config.contrast, apply_contrast);
+		break;
+		case GLOBAL_CONFIG_LANGUAGE:
+			if(button_press & ((1<<0x1)|(1<<0x2)|(1<<0x3)|(1<<0x4))) {
+				if(button_press & (1<<0x1)) {
+					global_config.language = LANG_EN;
+				} else if(button_press & (1<<0x2)) {
+					global_config.language = LANG_TOK;
+				} else if(button_press & (1<<0x3)) {
+					global_config.language = LANG_SP;
+				} else if(button_press & (1<<0x4)) {
+					global_config.language = LANG_QSS;
+				}
+				global_config_selection = GAME_CONFIG_MAIN;
+				menu_display_update_required = true;
+			} else if(button_press & (1<<0x10)) {
+				global_config_selection = GAME_CONFIG_MAIN;
+				menu_display_update_required = true;
+			}
+		break;
+		case GLOBAL_CONFIG_BOOT_ROM:
+			if(button_press & ((1<<0xF)|(1<<0x10))) {
+				if(button_press & (1<<0xF)) {
+					// TODO: perform clear ROM operation here!
+				}
+				global_config_selection = GAME_CONFIG_MAIN;
+				menu_display_update_required = true;
+			}
+		break;
+	}
+
+	if(screen_state != SCREEN_GLOBAL_CONFIG) {
+		// Always set volume back to zero before leaving the scene
+		// so that the buzzer won't be constantly on
+		buzzer_set_volume(0);
+		return;
+	}
+
+	static const uint32_t FEEDBACK_AUDIO_DURATION = FUNCONF_SYSTEM_CORE_CLOCK*2/60; // 2 frames of feedback audio
+	if(systick_now-global_config_buzzer_start_tick >= FEEDBACK_AUDIO_DURATION) {
+		buzzer_set_volume(0);
+	}
+
+	if(menu_display_update_required) {
+		draw_clear(chip8.periph.display);
+
+		draw_text(chip8.periph.display, "VOLUME............", 12, 0);
+		draw_text(chip8.periph.display, "BACKLIGHT.........", 12, 9);
+		draw_text(chip8.periph.display, "CONTRAST..........", 12, 18);
+		draw_text(chip8.periph.display, "LANGUAGE........", 12, 27);
+		draw_text(chip8.periph.display, "CLEAR BOOT ROM", 12, 36);
+
+		char value_str[2];
+		value_str[1] = '\0';
+		value_str[0] = (global_config.volume%10) + '0';
+		draw_text(chip8.periph.display, value_str, 120, 0);
+		value_str[0] = (global_config.backlight%10) + '0';
+		draw_text(chip8.periph.display, value_str, 120, 9);
+		value_str[0] = (global_config.contrast%10) + '0';
+		draw_text(chip8.periph.display, value_str, 120, 18);
+		switch(global_config.language) {
+			case LANG_EN: draw_text(chip8.periph.display, ".EN", 110, 27); break;
+			case LANG_TOK: draw_text(chip8.periph.display, "TOK", 110, 27); break;
+			case LANG_SP: draw_text(chip8.periph.display, ".SP", 110, 27); break;
+			case LANG_QSS: draw_text(chip8.periph.display, "QSS", 110, 27); break;
+			break;
+		}
+
+		switch(global_config_selection) {
+			case GLOBAL_CONFIG_MAIN:
+				draw_text(chip8.periph.display, "A)", 0, 0);
+				draw_text(chip8.periph.display, "B)", 0, 9);
+				draw_text(chip8.periph.display, "C)", 0, 18);
+				draw_text(chip8.periph.display, "D)", 0, 27);
+				draw_text(chip8.periph.display, "E)", 0, 36);
+				draw_text(chip8.periph.display, "F)SAVE", 0, 47);
+				draw_text(chip8.periph.display, "X)CANCEL", 0, 56);
+			break;
+			case GLOBAL_CONFIG_VOLUME:
+			case GLOBAL_CONFIG_BACKLIGHT:
+			case GLOBAL_CONFIG_CONTRAST:
+				switch(global_config_selection) {
+					case GLOBAL_CONFIG_VOLUME: draw_text(chip8.periph.display, "=>", 0, 0); break;
+					case GLOBAL_CONFIG_BACKLIGHT: draw_text(chip8.periph.display, "=>", 0, 9); break;
+					case GLOBAL_CONFIG_CONTRAST: draw_text(chip8.periph.display, "=>", 0, 18); break;
+					default: assert(false); break; // Should never happen!
+				}
+				draw_text(chip8.periph.display, "4)LESS 6)MORE", 0, 47);
+				draw_text(chip8.periph.display, "F)SAVE X)CANCEL", 0, 56);
+			break;
+			case GLOBAL_CONFIG_LANGUAGE:
+				draw_text(chip8.periph.display, "=>", 0, 27);
+				draw_text(chip8.periph.display, "1)EN 2)TOK 3)SP", 0, 47);
+				draw_text(chip8.periph.display, "4)QSS X)CANCEL", 0, 56);
+			break;
+			case GLOBAL_CONFIG_BOOT_ROM:
+				draw_text(chip8.periph.display, "=>", 0, 36);
+				draw_text(chip8.periph.display, "F)CONFIRM CLEAR", 0, 47);
+				draw_text(chip8.periph.display, "X)CANCEL", 0, 56);
+			break;
+		}
+		lcd_transfer_begin(chip8.periph.display);
+		menu_display_update_required = false;
+	}
 }
 
 static void screen_pre_gameplay_handler(void) {
@@ -820,9 +1040,9 @@ int main() {
 	lcd_init_second_stage(); // If card's inserted, must be done after spi_card_mount_filesystem()
 
 	config_load(&global_config);
-
-	lcd_set_brightness(global_config.backlight);
-	lcd_set_contrast(0x18+global_config.contrast*2);
+	apply_volume();
+	apply_brightness();
+	apply_contrast();
 
 	buzzer_set_volume(0); // Always use buzzer volume of 0 at the beginning
 
