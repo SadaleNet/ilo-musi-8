@@ -106,6 +106,7 @@ struct chip8_config {
 	uint8_t input_layout; // Datatype: enum chip8_input_layout. The keyboard layout. For documentation use. No actual function.
 	uint16_t input_navigation; // Buttons for navigation. For documentation use. No actual function.
 	uint16_t input_action; // Buttons for control. For documentation use. No actual function.
+	uint16_t input_replay; // Buttons for replay. For documentation use. No actual function.
 };
 
 void chip8_step(struct chip8_machine *machine);

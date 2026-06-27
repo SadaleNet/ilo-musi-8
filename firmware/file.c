@@ -88,6 +88,7 @@ static const struct chip8_config CHIP8_CFG_DEFAULT = {
 	.input_layout = 0,
 	.input_navigation = 0,
 	.input_action = 0,
+	.input_replay = 0,
 };
 
 static FATFS filesystem;
@@ -160,6 +161,7 @@ enum ini_key {
 	PARSING_INI_LAYOUT,
 	PARSING_INI_NAVIGATION,
 	PARSING_INI_ACTION,
+	PARSING_INI_REPLAY,
 };
 
 struct ini_parser {
@@ -256,6 +258,9 @@ static bool file_parse_ini(struct ini_parser *parser, const char *buffer, size_t
 						} else if(!strcmp(parser->parsing_key, "action") || !strcmp(parser->parsing_key, "nena-pali")) {
 							parser->parsing_key_type = PARSING_INI_ACTION;
 							parser->output_cfg->input_action = 0;
+						} else if(!strcmp(parser->parsing_key, "replay") || !strcmp(parser->parsing_key, "nena-sin")) {
+							parser->parsing_key_type = PARSING_INI_REPLAY;
+							parser->output_cfg->input_replay = 0;
 						} else {
 							// Unsupported key. Not gonna process that.
 							parser->state = PARSING_TRAILING;
@@ -311,6 +316,9 @@ static bool file_parse_ini(struct ini_parser *parser, const char *buffer, size_t
 							break;
 							case PARSING_INI_ACTION:
 								if(!file_parse_input_button(&parser->output_cfg->input_action, c)) { return false; }
+							break;
+							case PARSING_INI_REPLAY:
+								if(!file_parse_input_button(&parser->output_cfg->input_replay, c)) { return false; }
 							break;
 						}
 						parser->parse_index++;
@@ -452,6 +460,11 @@ uint8_t file_save_config(const char *path, const struct chip8_config *chip8_cfg)
 				index += util_print_button_buffer(&bulkmem->file_buffer[index], chip8_cfg->input_action);
 				index += sprintf(&bulkmem->file_buffer[index], "\n");
 			}
+			if(chip8_cfg->input_replay != CHIP8_CFG_DEFAULT.input_replay) {
+				index += sprintf(&bulkmem->file_buffer[index], "replay = ");
+				index += util_print_button_buffer(&bulkmem->file_buffer[index], chip8_cfg->input_replay);
+				index += sprintf(&bulkmem->file_buffer[index], "\n");
+			}
 			if(memcmp(chip8_cfg->font, CHIP8_CFG_DEFAULT.font, sizeof(chip8_cfg->font))) {
 				index += sprintf(&bulkmem->file_buffer[index], "font = ");
 				index += file_print_hex_buffer(&bulkmem->file_buffer[index], chip8_cfg->font, sizeof(chip8_cfg->font));
@@ -521,6 +534,11 @@ uint8_t file_readdir(const char *path, size_t offset, char (*filelist)[14], size
 			}
 			if(fileinfo.fname[0] == '\0') { // End of directory
 				break;
+			}
+			// Filter out non-directory and non-CH8 files
+			if(!(fileinfo.fattrib & AM_DIR) &&
+				(strlen(fileinfo.fname) < 4 || memcmp(&fileinfo.fname[strlen(fileinfo.fname)-4], ".CH8", 4))) {
+				continue;
 			}
 			if(listed_file_count >= offset) {
 				memcpy(filelist[fulfilled_count], fileinfo.fname, sizeof(fileinfo.fname));

@@ -54,10 +54,12 @@ extern const uint8_t ICON_GLOBALCONF[];
 extern const size_t ICON_GLOBALCONF_LENGTH;
 extern const uint8_t ICON_PLAY[];
 extern const size_t ICON_PLAY_LENGTH;
-extern const uint8_t ICON_ACTION[];
-extern const size_t ICON_ACTION_LENGTH;
 extern const uint8_t ICON_UPDIR[];
 extern const size_t ICON_UPDIR_LENGTH;
+extern const uint8_t ICON_ACTION[];
+extern const size_t ICON_ACTION_LENGTH;
+extern const uint8_t ICON_REPLAY[];
+extern const size_t ICON_REPLAY_LENGTH;
 
 enum screen_state {
 	SCREEN_ERROR, // File IO Error Screen
@@ -847,17 +849,23 @@ static void screen_pre_gameplay_handler(void) {
 		}
 		if(chip8_cfg->input_action) {
 			util_print_button_buffer(button_str, chip8_cfg->input_action);
-			uint8_t x = DISPLAY_WIDTH/2-(ICON_NAVIGATION_LENGTH+1+6*strlen(button_str))/2;
+			uint8_t x = DISPLAY_WIDTH/2-(ICON_ACTION_LENGTH+1+6*strlen(button_str))/2;
 			draw_bitmap_h8(chip8.periph.display, ICON_ACTION, ICON_ACTION_LENGTH, x, 20);
 			draw_text(chip8.periph.display, button_str, x+ICON_ACTION_LENGTH+1, 21);
 		}
+		if(chip8_cfg->input_replay) {
+			util_print_button_buffer(button_str, chip8_cfg->input_replay);
+			uint8_t x = DISPLAY_WIDTH/2-(ICON_REPLAY_LENGTH+1+6*strlen(button_str))/2;
+			draw_bitmap_h8(chip8.periph.display, ICON_REPLAY, ICON_REPLAY_LENGTH, x, 30);
+			draw_text(chip8.periph.display, button_str, x+ICON_REPLAY_LENGTH+1, 31);
+		}
 		switch(chip8_cfg->input_layout) {
 			case CHIP8_LAYOUT_QWERTY:
-				draw_text(chip8.periph.display, "123C  1234", 34, 32);
-				draw_text(chip8.periph.display, "456D  QWER", 34, 32+6);
-				draw_text(chip8.periph.display, "789E  ASDF", 34, 32+12);
-				draw_text(chip8.periph.display, "A0BF  ZXCV", 34, 32+18);
-				draw_text(chip8.periph.display, "=", 64-3, 32+9);
+				draw_text(chip8.periph.display, "123C  1234", 34, 40);
+				draw_text(chip8.periph.display, "456D  QWER", 34, 40+6);
+				draw_text(chip8.periph.display, "789E  ASDF", 34, 40+12);
+				draw_text(chip8.periph.display, "A0BF  ZXCV", 34, 40+18);
+				draw_text(chip8.periph.display, "=", 64-3, 40+9);
 			break;
 			default:
 				// do not show the layout because it's the same as the keycap label
