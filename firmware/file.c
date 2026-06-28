@@ -342,7 +342,6 @@ uint8_t file_load_config(const char *path, struct chip8_config *chip8_cfg) {
 	FRESULT ret;
 	UINT bytesread;
 	char *buffer = (char*)bulkmem->file_buffer;
-	size_t buffer_size = sizeof(bulkmem->file_buffer);
 
 	struct ini_parser ini_parser;
 	memset(&ini_parser, 0, sizeof(ini_parser));
@@ -353,7 +352,7 @@ uint8_t file_load_config(const char *path, struct chip8_config *chip8_cfg) {
 	ret = f_open(&fil, path, FA_READ);
 	if(ret == FR_OK) {
 		while(true) {
-			ret = f_read(&fil, buffer, buffer_size, &bytesread);
+			ret = f_read(&fil, buffer, FILE_BUFFER_SIZE, &bytesread);
 			if(ret != FR_OK) { // Error condition
 				break;
 			}
@@ -361,7 +360,7 @@ uint8_t file_load_config(const char *path, struct chip8_config *chip8_cfg) {
 				ret = FR_INI_PARSE_ERROR; // Borrowing the enum for INI parsing error
 				break;
 			}
-			if(bytesread < buffer_size) { // EOF condition
+			if(bytesread < FILE_BUFFER_SIZE) { // EOF condition
 				break;
 			}
 		}
@@ -576,9 +575,8 @@ uint8_t file_verify_firmware_update(void) {
 	ret = f_open(&fil, FLASH_FILE, FA_READ);
 	if(ret == FR_OK) {
 		char *buffer = (char*)bulkmem->file_buffer;
-		size_t buffer_size = sizeof(bulkmem->file_buffer);
 		while(flash_offset < (uint8_t*)FLASH_END_OFFSET) {
-			ret = f_read(&fil, buffer, buffer_size, &bytesread);
+			ret = f_read(&fil, buffer, FILE_BUFFER_SIZE, &bytesread);
 			if(ret != FR_OK) { // Error condition
 				break;
 			}
@@ -587,7 +585,7 @@ uint8_t file_verify_firmware_update(void) {
 				break;
 			}
 			flash_offset += bytesread;
-			if(bytesread < buffer_size) { // EOF condition
+			if(bytesread < FILE_BUFFER_SIZE) { // EOF condition
 				break;
 			}
 		}

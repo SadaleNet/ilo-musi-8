@@ -38,10 +38,11 @@
 #include "chip8.h"
 #include <stdint.h>
 
+#define FILE_BUFFER_SIZE (512)
 #define MENU_PAGE_SIZE (10)
 struct shared_buffer {
 	struct chip8_config chip8_cfg;
-	char file_buffer[512];
+	char file_buffer[FILE_BUFFER_SIZE];
 	char menu_file_list[MENU_PAGE_SIZE][14];
 };
 
