@@ -35,7 +35,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include <assert.h>
 
 #define FLASH_FILE "ILOMUSI8.BIN"
@@ -513,7 +515,7 @@ uint8_t file_load_rom(const char *path, const struct chip8_config *chip8_cfg, st
 	return ret;
 }
 
-uint8_t file_readdir(const char *path, size_t offset, char (*filelist)[14], size_t *count) {
+static uint8_t file_readdir_from_card(const char *path, size_t offset, char (*filelist)[14], size_t *count) {
 	if(!file_card_mode_enter()) {
 		return mount_result;
 	}
@@ -521,6 +523,7 @@ uint8_t file_readdir(const char *path, size_t offset, char (*filelist)[14], size
 	size_t listed_file_count = 0;
 	size_t required_count = *count;
 	size_t fulfilled_count = 0;
+
 	DIR dir;
 	FRESULT ret;
     FILINFO fileinfo;
@@ -532,6 +535,7 @@ uint8_t file_readdir(const char *path, size_t offset, char (*filelist)[14], size
 				break;
 			}
 			if(fileinfo.fname[0] == '\0') { // End of directory
+				bulkmem->readdir_max_count = listed_file_count;
 				break;
 			}
 			// Filter out non-directory and non-CH8 files
@@ -560,6 +564,70 @@ uint8_t file_readdir(const char *path, size_t offset, char (*filelist)[14], size
 	*count = fulfilled_count;
 
 	file_card_mode_exit();
+	return ret;
+}
+
+static void file_sort_entry_insert_filetype_prefix(char dest[16], const char *src) {
+	// Insert 'A' prefix for directories. 'B' prefix for files
+	// This way the directories would get sorted first.
+	if(strlen(src) > 0 && ((char*)src)[strlen(src)-1] == '/') {
+		dest[0] = 'A';
+	} else {
+		dest[0] = 'B';
+	}
+	memcpy(&dest[1], src, sizeof(*bulkmem->readdir_cache));
+}
+
+static int file_sort_entry(const void *a, const void *b) {
+	char a2[16];
+	char b2[16];
+
+	// Ensure that there's enough space for inserting the prefix letter
+	assert(sizeof(*bulkmem->readdir_cache)+1 < sizeof(a2));
+	assert(sizeof(*bulkmem->readdir_cache)+1 < sizeof(b2));
+
+	// Sorting: directories come first, then it comes the file.
+	// The files got sorted alphabetically
+	file_sort_entry_insert_filetype_prefix(a2, a);
+	file_sort_entry_insert_filetype_prefix(b2, b);
+	return strcmp(a2, b2);
+}
+
+uint8_t file_readdir(const char *path, bool changed, size_t offset, char (*filelist)[14], size_t *count) {
+	char (*readdir_cache)[14] = bulkmem->readdir_cache;
+	FRESULT ret;
+	size_t required_count = *count;
+	size_t fulfilled_count = 0;
+
+	if(changed) {
+		// Cache invalidated. Need to load the first READDIR_CACHE_SIZE items into cache
+		bulkmem->readdir_max_count = SIZE_MAX; // We don't know how many files is in the directory. Using SIZE_MAX until it's determined
+		bulkmem->readdir_cache_count = READDIR_CACHE_SIZE;
+		ret = file_readdir_from_card(path, 0, readdir_cache, &bulkmem->readdir_cache_count);
+		if(ret != FR_OK) {
+			return ret;
+		}
+		// Sort the cached directory content (Remarks: The uncached content won't be sorted)
+		qsort(readdir_cache, bulkmem->readdir_cache_count, sizeof(*readdir_cache), file_sort_entry);
+	}
+
+	// First grab the cached results
+	while(fulfilled_count < required_count && offset < bulkmem->readdir_cache_count) {
+		memcpy(filelist[fulfilled_count++], readdir_cache[offset++], sizeof(*readdir_cache));
+	}
+	if(fulfilled_count >= required_count // All request fulfilled
+		|| (offset >= bulkmem->readdir_max_count) // End of filelist reached
+	) {
+		*count = fulfilled_count;
+		return FR_OK;
+	}
+
+	// If the cached result isn't enough to fulfill the request, read the remaining content from the card
+	size_t uncached_count = required_count-fulfilled_count;
+	ret = file_readdir_from_card(path, offset, &filelist[fulfilled_count], &uncached_count);
+	fulfilled_count += uncached_count;
+	*count = fulfilled_count;
+
 	return ret;
 }
 

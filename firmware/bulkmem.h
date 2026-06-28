@@ -37,13 +37,18 @@
 
 #include "chip8.h"
 #include <stdint.h>
+#include <stddef.h> // For size_t
 
 #define FILE_BUFFER_SIZE (512)
 #define MENU_PAGE_SIZE (10)
+#define READDIR_CACHE_SIZE (200)
 struct shared_buffer {
 	struct chip8_config chip8_cfg;
 	char file_buffer[FILE_BUFFER_SIZE];
 	char menu_file_list[MENU_PAGE_SIZE][14];
+	size_t readdir_cache_count;
+	size_t readdir_max_count; // SIZE_MAX if undetermined
+	char readdir_cache[READDIR_CACHE_SIZE][14];
 };
 
 extern struct shared_buffer *bulkmem;

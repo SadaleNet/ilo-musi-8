@@ -149,7 +149,8 @@ bool menu_display_update_required;
 
 // For SCREEN_MENU
 char (*menu_file_list)[14];
-static char menu_current_dir[256]; // Must not use bulkmem because this path's used for loading the ROM
+char menu_current_dir[256]; // Must not use bulkmem because this path's used for loading the ROM
+bool menu_cache_invalidated; // Must invalidate upon bulkmem's filled by game ROM, upon path change, or upon change of directory's content
 int menu_offset;
 uint8_t file_io_result;
 size_t menu_file_count_of_current_page;
@@ -220,6 +221,7 @@ static void screen_error_handler(void) {
 	uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
 	if(button_press & (1<<0x10)) {
 		menu_current_dir[0] = '\0';
+		menu_cache_invalidated = true;
 		menu_offset = 0;
 		menu_dir_reload_required = true;
 		screen_state = SCREEN_MENU;
@@ -308,6 +310,7 @@ static void screen_menu_handler(void) {
 			} else {
 				// After entering the directory, reset the cursor to the beginning
 				menu_offset = 0;
+				menu_cache_invalidated = true;
 				menu_dir_reload_required = true;
 			}
 		} else {
@@ -319,6 +322,7 @@ static void screen_menu_handler(void) {
 				// Config file loaded successfully. Let's try loading the game!
 				memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "CH8", 3); // resume file extension of .CH8
 				file_io_result = file_load_rom(menu_current_dir, chip8_cfg, &chip8);
+				menu_cache_invalidated = true;
 				if(file_io_result == FR_OK) {
 					memcpy(last_storage_flag, chip8_cfg->storage_flags, sizeof(chip8_cfg->storage_flags));
 					// Initialize peripheral variables
@@ -352,6 +356,7 @@ static void screen_menu_handler(void) {
 		directory_up(menu_current_dir);
 		// Always reload directory so that the user would have visual feedback
 		menu_offset = 0;
+		menu_cache_invalidated = true;
 		menu_dir_reload_required = true;
 	} else {
 		if(button_press & (1<<2)) { menu_offset--; }
@@ -377,7 +382,8 @@ static void screen_menu_handler(void) {
 
 		for(size_t i=0; i<2; i++) {
 			menu_file_count_of_current_page = MENU_PAGE_SIZE;
-			file_io_result = file_readdir(menu_current_dir, menu_offset/MENU_PAGE_SIZE*MENU_PAGE_SIZE, menu_file_list, &menu_file_count_of_current_page);
+			file_io_result = file_readdir(menu_current_dir, menu_cache_invalidated, menu_offset/MENU_PAGE_SIZE*MENU_PAGE_SIZE, menu_file_list, &menu_file_count_of_current_page);
+			menu_cache_invalidated = false;
 			if(file_io_result == FR_OK) {
 				if(menu_offset > 0 && menu_file_count_of_current_page == 0) {
 					// The new page's empty. It happens when we reached the end of the directory
@@ -463,6 +469,7 @@ static void screen_game_config_handler(void) {
 				directory_remove_filename(menu_current_dir);
 
 				screen_state = SCREEN_MENU;
+				menu_cache_invalidated = true; // INI file updated. file tree of the dircectory may be changed. Need to invalidate cache
 				menu_display_update_required = true;
 			} else if(button_press & (1<<0x10)) { // The X button
 				// Discard game config by not saving it
@@ -901,6 +908,7 @@ static void screen_gameplay_handler(void) {
 			if(memcmp(last_storage_flag, chip8.periph.storage_flags, sizeof(chip8.periph.storage_flags))) {
 				// Storage flag changed. Let's save it!
 				file_io_result = file_save_storage_flag(chip8.periph.storage_flags, sizeof(chip8.periph.storage_flags));
+				menu_cache_invalidated = true; // file content changed. file tree of the dircectory may be changed. Need to invalidate cache
 			}
 
 			if(file_io_result != FR_OK) {
@@ -1066,6 +1074,7 @@ int main() {
 	// For SCREEN_MENU
 	menu_file_list = bulkmem->menu_file_list;
 	menu_current_dir[0] = '\0';
+	menu_cache_invalidated = true;
 	menu_offset = 0;
 	file_io_result = FR_OK;
 	menu_file_count_of_current_page = 0;

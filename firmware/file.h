@@ -49,5 +49,5 @@ uint8_t file_load_config(const char *path, struct chip8_config *chip8_cfg);
 uint8_t file_save_config(const char *path, const struct chip8_config *chip8_cfg);
 uint8_t file_load_rom(const char *path, const struct chip8_config *chip8_cfg, struct chip8_machine *chip8_machine);
 uint8_t file_save_storage_flag(const uint8_t *storage_flags, size_t flag_size);
-uint8_t file_readdir(const char *path, size_t offset, char (*filelist)[14], size_t *count);
+uint8_t file_readdir(const char *path, bool changed, size_t offset, char (*filelist)[14], size_t *count);
 uint8_t file_verify_firmware_update(void); // Verify firmware. If OK, automatically delete the firmware file

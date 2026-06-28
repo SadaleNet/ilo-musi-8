@@ -26,6 +26,8 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
+#include <assert.h>
 
 int util_print_button_buffer(char *dest, uint16_t buttons) {
 	int ret = 0;
@@ -44,4 +46,24 @@ int util_print_button_buffer(char *dest, uint16_t buttons) {
 
 void __assert_func(const char*, int, const char*, const char*) {
 	while(1);
+}
+
+void qsort(void* ptr, size_t count, size_t size, int (*comp)(const void*, const void*)) {
+	// Implements insertion sort
+	uint8_t buf[16];
+	assert(size <= sizeof(buf));
+	for(size_t i=1; i<count; i++) {
+		memcpy(buf, &((uint8_t*)ptr)[i*size], size);
+		for(size_t j=i; j>=1; j--) {
+			if(comp(buf, &((uint8_t*)ptr)[(j-1)*size]) < 0) {
+				memcpy(&((uint8_t*)ptr)[j*size], &((uint8_t*)ptr)[(j-1)*size], size);
+				if(j == 1) {
+					memcpy((uint8_t*)ptr, buf, size);
+				}
+			} else {
+				memcpy(&((uint8_t*)ptr)[j*size], buf, size);
+				break;
+			}
+		}
+	}
 }

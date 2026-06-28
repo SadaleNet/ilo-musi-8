@@ -96,7 +96,10 @@ struct chip8_machine {
 	uint8_t mem[CHIP8_MEMORY_SIZE]; // Upon run, external code load the program to chip8.mem[CHIP8_PROGRAM_START_OFFSET] with size of CHIP8_MEMORY_SIZE-CHIP8_PROGRAM_START_OFFSET.
 };
 
+#define CHIP8_CFG_VERSION (0) // Used only for boot ROM. For INI file, assume latest version
+
 struct chip8_config {
+	uint32_t version; // To update the struct, you can only append fields to the end and then increment the version
 	uint8_t font[16*5];
 	uint8_t font_highres[16*10];
 	uint8_t audio[CHIP8_AUDIO_BUFFER_SIZE];
