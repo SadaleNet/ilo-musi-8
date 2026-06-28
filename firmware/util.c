@@ -54,16 +54,15 @@ void qsort(void* ptr, size_t count, size_t size, int (*comp)(const void*, const 
 	assert(size <= sizeof(buf));
 	for(size_t i=1; i<count; i++) {
 		memcpy(buf, &((uint8_t*)ptr)[i*size], size);
-		for(size_t j=i; j>=1; j--) {
-			if(comp(buf, &((uint8_t*)ptr)[(j-1)*size]) < 0) {
-				memcpy(&((uint8_t*)ptr)[j*size], &((uint8_t*)ptr)[(j-1)*size], size);
-				if(j == 1) {
-					memcpy((uint8_t*)ptr, buf, size);
-				}
-			} else {
-				memcpy(&((uint8_t*)ptr)[j*size], buf, size);
+		size_t j;
+		for(j=i; j>=1; j--) {
+			if(comp(buf, &((uint8_t*)ptr)[(j-1)*size]) >= 0) {
 				break;
 			}
+		}
+		if(j < i) {
+			memmove(&((uint8_t*)ptr)[(j+1)*size], &((uint8_t*)ptr)[j*size], (i-j)*size);
+			memcpy(&((uint8_t*)ptr)[j*size], buf, size);
 		}
 	}
 }
