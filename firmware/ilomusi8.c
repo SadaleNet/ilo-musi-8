@@ -468,7 +468,7 @@ static void screen_game_config_handler(void) {
 				file_io_result = file_save_config(menu_current_dir, chip8_cfg);
 				directory_remove_filename(menu_current_dir);
 
-				screen_state = SCREEN_MENU;
+				screen_state = (file_io_result == FR_OK) ? SCREEN_MENU : SCREEN_ERROR;
 				menu_cache_invalidated = true; // INI file updated. file tree of the dircectory may be changed. Need to invalidate cache
 				menu_display_update_required = true;
 			} else if(button_press & (1<<0x10)) { // The X button
