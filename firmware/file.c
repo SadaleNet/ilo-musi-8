@@ -41,6 +41,7 @@
 #include <assert.h>
 
 #define FLASH_FILE "ILOMUSI8.BIN"
+#define FLASH_FILE_OLD "ILOMUSI8.BI_" // After complete flashing, change the filename to this one
 #define FLASH_START_OFFSET (0x08000000)
 #define FLASH_END_OFFSET (0x0800F800)
 
@@ -661,8 +662,15 @@ uint8_t file_verify_firmware_update(void) {
 	}
 	if(ret == FR_OK) {
 		// Verification completed
-		// Delete firmware file so that the bootloader won't flash it again
-		ret = f_unlink(FLASH_FILE);
+		// Rename firmware file as backup so that the bootloader won't flash it again
+		ret = f_rename(FLASH_FILE, FLASH_FILE_OLD);
+		if (ret == FR_EXIST) {
+			// In case the backup file existed, overwrite the backup with the latest one
+			ret = f_unlink(FLASH_FILE_OLD);
+			if(ret == FR_OK) {
+				ret = f_rename(FLASH_FILE, FLASH_FILE_OLD);
+			}
+		}
 	}
 
 	file_card_mode_exit();
