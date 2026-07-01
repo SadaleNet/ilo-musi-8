@@ -730,6 +730,7 @@ static void screen_global_config_handler(void) {
 				} \
 			} else if(button_press & (1<<0xF)) { \
 				global_config_selection = GLOBAL_CONFIG_MAIN; \
+				CONFIG_ADJUSTED_HANDLER(); \
 				menu_display_update_required = true; \
 			} else if(button_press & (1<<0x10)) { \
 				global_config_selection = GLOBAL_CONFIG_MAIN; \
