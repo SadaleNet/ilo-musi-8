@@ -1115,6 +1115,7 @@ int main() {
 		file_loop();
 
 		systick_now = SysTick->CNT;
+		enum screen_state screen_state_prev = screen_state;
 		switch(screen_state) {
 			case SCREEN_ERROR: screen_error_handler(); break;
 			case SCREEN_MENU: screen_menu_handler(); break;
@@ -1125,6 +1126,14 @@ int main() {
 			case SCREEN_GAMEOVER: screen_gameover_handler(); break;
 			case SCREEN_GAME_CRASHED: screen_game_crashed_handler(); break;
 			case SCREEN_FW_UPDATE_OK: screen_fw_update_ok_handler(); break;
+		}
+
+		if(screen_state != screen_state_prev) {
+			// The LCD's specs recommends calling this function once a while
+			// I'm gonna call it upon screen switch.
+			// It also double as visual feedback to the user because
+			// the screen would go blank for like 0.3s when this function's called
+			lcd_refresh();
 		}
 
 		watchdog_feed();
