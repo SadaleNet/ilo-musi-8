@@ -44,6 +44,7 @@ struct adc_row_scan_config {
 
 // 16bit would fit but I'm using 32bit for performance
 uint32_t adc_dma_buffer[20];
+uint32_t adc_dma_buffer_debounce; // Record the previous data. For debouncing. Only take the input after 2 consecutive same data.
 uint32_t adc_button_state; // CONCURRENCY_VARIABLE: Written in adc_button_scan_next_row(), read by adc_button_get_state()
 uint32_t adc_button_just_pressed; // CONCURRENCY_VARIABLE: Written in adc_button_scan_next_row(), read and reset in adc_button_get_just_pressed()
 uint32_t adc_button_just_released; // CONCURRENCY_VARIABLE: Written in adc_button_scan_next_row(), read and reset in adc_button_get_just_released()
@@ -86,18 +87,25 @@ void adc_button_scan_next_row(void) {
 	// Not performing debounce handling because the ADC reading's slow enough
 	for(size_t i=ROW_SCAN_SEQUENCE_CHANNEL_COUNT*row_scan_index; i<ROW_SCAN_SEQUENCE_CHANNEL_COUNT*(row_scan_index+1) && i<ADC_BUTTON_STATE_SIZE; i++) {
 		uint32_t button_mask = (1U<<i);
-		if(adc_dma_buffer[i] >= ADC_BUTTON_PRESSED_THRESHOLD) {
+		bool button_pressed = (adc_dma_buffer[i] >= ADC_BUTTON_PRESSED_THRESHOLD);
+		if(button_pressed && (adc_dma_buffer_debounce & button_mask)) {
 			// Button held
 			if(!(adc_button_state & button_mask)) {
 				adc_button_just_pressed |= button_mask;
 			}
 			adc_button_state |= button_mask;
-		} else {
+		} else if (!button_pressed && !(adc_dma_buffer_debounce & button_mask)) {
 			// Button not held
 			if(adc_button_state & button_mask) {
 				adc_button_just_released |= button_mask;
 			}
 			adc_button_state &= ~button_mask;
+		}
+		// For debouncing. Only count the button press after detecting the same value twice
+		if(button_pressed) {
+			adc_dma_buffer_debounce |= button_mask;
+		} else {
+			adc_dma_buffer_debounce &= ~button_mask;
 		}
 	}
 
@@ -226,6 +234,7 @@ void adc_init(void) {
 	// Initialize variables
 	asm volatile("" ::: "memory");
 	memset(adc_dma_buffer, 0, sizeof(adc_dma_buffer));
+	adc_dma_buffer_debounce = 0;
 	adc_button_state = 0;
 	adc_button_just_pressed = 0;
 	adc_button_just_released = 0;
