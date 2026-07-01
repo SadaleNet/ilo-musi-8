@@ -226,6 +226,7 @@ static void screen_error_handler(void) {
 		menu_dir_reload_required = true;
 		screen_state = SCREEN_MENU;
 	} else if((button_press & (1<<0xD))) { // Allows visiting global config screen with D button even with card error
+		memcpy(&global_config_backup, &global_config, sizeof(global_config_backup));
 		screen_state = SCREEN_GLOBAL_CONFIG;
 		menu_display_update_required = true;
 	}
@@ -237,36 +238,46 @@ static void screen_error_handler(void) {
 	if(menu_display_update_required) {
 		draw_clear(chip8.periph.display);
 		draw_text(chip8.periph.display, "XXXXXXXXXXXXXXXXXXXXX", 0, 0);
-		draw_text(chip8.periph.display, "CARD ERROR #", 0, 20);
+		draw_text(chip8.periph.display, "CARD ERROR #", 0, 10);
 		char errorcode[3] = {0};
 		errorcode[0] = file_io_result/10 + '0';
 		errorcode[1] = file_io_result%10 + '0';
 		errorcode[2] = '\0';
-		draw_text(chip8.periph.display, errorcode, 6*12, 20);
+		draw_text(chip8.periph.display, errorcode, 6*12, 10);
 		switch(file_io_result) {
 			case FR_NOT_READY:
-				draw_text(chip8.periph.display, "NO CARD", 0, 30);
+				draw_text(chip8.periph.display, "NO CARD", 0, 20);
 			break;
 			case FR_NO_FILESYSTEM:
-				draw_text(chip8.periph.display, "FILESYSTEM ERROR", 0, 30);
-				draw_text(chip8.periph.display, "REQUIRES FAT16/FAT32", 0, 40);
+				draw_text(chip8.periph.display, "FILESYSTEM ERROR", 0, 20);
+				draw_text(chip8.periph.display, "REQUIRES FAT16/FAT32", 0, 30);
 			break;
 			case FR_INI_PARSE_ERROR:
-				draw_text(chip8.periph.display, "INVALID CONFIG INI", 0, 30);
+				draw_text(chip8.periph.display, "INVALID CONFIG INI", 0, 20);
 			break;
 			case FR_VOLUME_FULL:
-				draw_text(chip8.periph.display, "VOLUME FULL", 0, 30);
+				draw_text(chip8.periph.display, "VOLUME FULL", 0, 20);
 			break;
 			case FR_FIRMWARE_VERIFICATION_ERROR:
-				draw_text(chip8.periph.display, "FW VERIFY ERROR", 0, 30);
+				draw_text(chip8.periph.display, "FW VERIFY ERROR", 0, 20);
 			break;
 			case FR_PATH_LENGTH_ERROR:
-				draw_text(chip8.periph.display, "PATH TOO LONG", 0, 30);
+				draw_text(chip8.periph.display, "PATH TOO LONG", 0, 20);
+			break;
+			case FR_LOW_BATTERY:
+				draw_text(chip8.periph.display, "LOW BATTERY", 0, 20);
+				draw_text(chip8.periph.display, "CARD WRITE DISABLED", 0, 30);
+			break;
+			case FR_VERY_LOW_BATTERY:
+				draw_text(chip8.periph.display, "VERY LOW BATTERY", 0, 20);
+				draw_text(chip8.periph.display, "PLEASE REPLACE", 0, 30);
 			break;
 			default:
 			break;
 		}
-		draw_text(chip8.periph.display, "PRESS <X> TO PROCEED", 0, 40);
+		if(file_io_result != FR_VERY_LOW_BATTERY) {
+			draw_text(chip8.periph.display, "PRESS <X> TO RETRY", 0, 48);
+		}
 		draw_text(chip8.periph.display, "XXXXXXXXXXXXXXXXXXXXX", 0, 58);
 		lcd_transfer_begin(chip8.periph.display);
 		menu_display_update_required = false;
@@ -682,7 +693,7 @@ static void screen_global_config_handler(void) {
 				menu_display_update_required = true;
 			} else if(button_press & (1<<0xF)) { // The F button
 				config_save(&global_config);
-				screen_state = SCREEN_MENU;
+				screen_state = (file_io_result == FR_OK) ? SCREEN_MENU : SCREEN_ERROR; // If the user came from SCREEN_ERROR, file_io_result might not be FR_OK
 				menu_display_update_required = true;
 			} else if(button_press & (1<<0x10)) { // The X button
 				// Revert to original global config
@@ -690,7 +701,7 @@ static void screen_global_config_handler(void) {
 				apply_volume();
 				apply_brightness();
 				apply_contrast();
-				screen_state = SCREEN_MENU;
+				screen_state = (file_io_result == FR_OK) ? SCREEN_MENU : SCREEN_ERROR; // If the user came from SCREEN_ERROR, file_io_result might not be FR_OK
 				menu_display_update_required = true;
 			}
 		break;
@@ -1085,6 +1096,8 @@ int main() {
 	game_config_index = 0;
 	game_config_old_value = 0;
 
+	// Verify firmware update content
+	// It also shows low battery message in case low battery's detected (regardless if there's firmware update)
 	file_io_result = file_verify_firmware_update();
 	if(file_io_result == FR_NO_FILE) {
 		screen_state = SCREEN_MENU;

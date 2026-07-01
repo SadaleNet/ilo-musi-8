@@ -45,6 +45,12 @@
 #define FLASH_START_OFFSET (0x08000000)
 #define FLASH_END_OFFSET (0x0800F800)
 
+#define CARD_READ_VOLTAGE_LIMIT (2700) // Prevents card read if the supply voltage is lower than that. Unit is mV
+#define CARD_WRITE_VOLTAGE_LIMIT (3000) // Same as above except for card write.
+// Deadband for card write. The error's only resolved if the voltage get this high above the threshold.
+// Card read error would never get resolved because the battery's essentially dead
+#define CARD_WRITE_VOLTAGE_DEADBAND (100)
+
 #define STORAGE_FLAG_FILE "FX75FX85.BIN"
 
 static const struct chip8_config CHIP8_CFG_DEFAULT = {
@@ -101,7 +107,8 @@ static FRESULT mount_filesystem(void) {
 	return f_mount(&filesystem, "", 1);
 }
 
-static bool file_card_mode_enter(void) {
+static uint8_t file_card_mode_enter(bool write_operation) {
+	uint8_t ret = FR_OK;
 	if(mount_result != FR_OK) {
 		// If not mounted, give it a chance to mount right now!
 		if(adc_card_is_inserted()) {
@@ -109,14 +116,45 @@ static bool file_card_mode_enter(void) {
 			spi_set_mode(SPI_MODE_MEMORY_CARD_SLOW);
 			mount_result = mount_filesystem();
 		}
-		if(mount_result != FR_OK) {
-			return false;
-		}
+		ret = mount_result;
 	}
 
+	// Check voltage level for disabling card write/read access.
+	// This is intentionally done after mounting to make sure that
+	// the card initialization mechanism has been attempted.
+	// Without the initialization, the LCD SPI signals would get read by the card,
+	// which the random LCD SPI data can end up bricking the card.
+	// This check's performed regardless of mount_result so that when the error screen
+	// get shown, the battery error would have higher priority than mount errors.
+	uint32_t supply_voltage = adc_get_supply_voltage();
+	static bool read_voltage_failure_triggered = false;
+	static bool write_voltage_failure_triggered = false;
+
+	if(!read_voltage_failure_triggered && supply_voltage < CARD_READ_VOLTAGE_LIMIT) {
+		read_voltage_failure_triggered = true;
+	}
+	
+	if(!write_voltage_failure_triggered && supply_voltage < CARD_WRITE_VOLTAGE_LIMIT) {
+		write_voltage_failure_triggered = true;
+	} else if(write_voltage_failure_triggered && supply_voltage >= CARD_WRITE_VOLTAGE_LIMIT+CARD_WRITE_VOLTAGE_DEADBAND) {
+		write_voltage_failure_triggered = false;
+	}
+	
+	if(read_voltage_failure_triggered) {
+		ret = FR_VERY_LOW_BATTERY; // Prevents card read
+	} else if(write_operation && write_voltage_failure_triggered) {
+		ret = FR_LOW_BATTERY; // Prevents card write
+	}
+
+	// Must wait for transfer completion before setting mode, even if we're setting it to SPI_MODE_LCD
+	// Otherwise it can break the on-going LCD transfer
 	while(lcd_is_transfer_in_progress()){}
-	spi_set_mode(SPI_MODE_MEMORY_CARD);
-	return true;
+	spi_set_mode(ret == FR_OK ? SPI_MODE_MEMORY_CARD : SPI_MODE_LCD);
+
+	// If the return value is FR_OK, The SPI bus would be in SPI_MODE_MEMORY_CARD and the caller function must
+	// call file_card_mode_exit() after it finishes working with the card to release the SPI bus for LCD
+	// Otherwise the SPI bus would be in SPI_MODE_LCD and the caller function wouldn't need to release the SPI bus
+	return ret;
 }
 
 static void file_card_mode_exit(void) {
@@ -136,7 +174,8 @@ void file_first_mount(void) {
 void file_loop(void) {
 	// Handle card reinsertion. Must initialize the card before any LCD SPI communication
 	// In practice, if LCD SPI communicaition is on-going, it won't stop until the row's sent
-	// so there might be a bit of delay of SPI initialization for the card
+	// and there's no implemented mechanism to stop the LCD SPI transfer
+	// so there might be a very little bit of delay of SPI initialization for the card
 	if(adc_card_is_just_removed()) {
 		mount_result = FR_NOT_READY;
 	}
@@ -337,12 +376,12 @@ static bool file_parse_ini(struct ini_parser *parser, const char *buffer, size_t
 }
 
 uint8_t file_load_config(const char *path, struct chip8_config *chip8_cfg) {
-	if(!file_card_mode_enter()) {
-		return mount_result;
+	uint8_t ret = file_card_mode_enter(false);
+	if(ret != FR_OK) {
+		return ret;
 	}
 
 	FIL fil;
-	FRESULT ret;
 	UINT bytesread;
 	char *buffer = (char*)bulkmem->file_buffer;
 
@@ -398,12 +437,13 @@ uint8_t file_load_config(const char *path, struct chip8_config *chip8_cfg) {
 }
 
 uint8_t file_save_storage_flag(const uint8_t *storage_flags, size_t flag_size) {
-	if(!file_card_mode_enter()) {
-		return mount_result;
+	uint8_t ret = file_card_mode_enter(true);
+	if(ret != FR_OK) {
+		return ret;
 	}
 
 	FIL fil;
-	FRESULT ret = f_open(&fil, STORAGE_FLAG_FILE, FA_WRITE|FA_CREATE_ALWAYS);
+	ret = f_open(&fil, STORAGE_FLAG_FILE, FA_WRITE|FA_CREATE_ALWAYS);
 	if(ret == FR_OK) {
 		UINT byteswritten;
 		ret = f_write(&fil, storage_flags, flag_size, &byteswritten);
@@ -425,12 +465,12 @@ int file_print_hex_buffer(char *dest, const uint8_t *buffer, size_t buffer_size)
 }
 
 uint8_t file_save_config(const char *path, const struct chip8_config *chip8_cfg) {
-	if(!file_card_mode_enter()) {
-		return mount_result;
+	uint8_t ret = file_card_mode_enter(true);
+	if(ret != FR_OK) {
+		return ret;
 	}
 
 	FIL fil;
-	FRESULT ret;
 	ret = f_open(&fil, path, FA_WRITE|FA_CREATE_ALWAYS);
 	if(ret == FR_OK) {
 		do {
@@ -497,14 +537,14 @@ uint8_t file_save_config(const char *path, const struct chip8_config *chip8_cfg)
 }
 
 uint8_t file_load_rom(const char *path, const struct chip8_config *chip8_cfg, struct chip8_machine *chip8_machine) {
-	if(!file_card_mode_enter()) {
-		return mount_result;
+	uint8_t ret = file_card_mode_enter(false);
+	if(ret != FR_OK) {
+		return ret;
 	}
 
 	chip8_init(chip8_machine, chip8_cfg);
 
 	FIL fil;
-	FRESULT ret;
 	UINT bytesread;
 	ret = f_open(&fil, path, FA_READ);
 	if(ret == FR_OK) {
@@ -517,8 +557,9 @@ uint8_t file_load_rom(const char *path, const struct chip8_config *chip8_cfg, st
 }
 
 static uint8_t file_readdir_from_card(const char *path, size_t offset, char (*filelist)[14], size_t *count) {
-	if(!file_card_mode_enter()) {
-		return mount_result;
+	uint8_t ret = file_card_mode_enter(false);
+	if(ret != FR_OK) {
+		return ret;
 	}
 
 	size_t listed_file_count = 0;
@@ -526,7 +567,6 @@ static uint8_t file_readdir_from_card(const char *path, size_t offset, char (*fi
 	size_t fulfilled_count = 0;
 
 	DIR dir;
-	FRESULT ret;
     FILINFO fileinfo;
     ret = f_opendir(&dir, path);
     if(ret == FR_OK) {
@@ -596,7 +636,7 @@ static int file_sort_entry(const void *a, const void *b) {
 
 uint8_t file_readdir(const char *path, bool changed, size_t offset, char (*filelist)[14], size_t *count) {
 	char (*readdir_cache)[14] = bulkmem->readdir_cache;
-	FRESULT ret;
+	uint8_t ret;
 	size_t required_count = *count;
 	size_t fulfilled_count = 0;
 
@@ -633,12 +673,14 @@ uint8_t file_readdir(const char *path, bool changed, size_t offset, char (*filel
 }
 
 uint8_t file_verify_firmware_update(void) {
-	if(!file_card_mode_enter()) {
-		return mount_result;
+	// Intentionally set write_operation=true because of possible file rename
+	// Since this function always got run on boot, it also double as a mechanism for showing low battery warning on boot
+	uint8_t ret = file_card_mode_enter(true);
+	if(ret != FR_OK) {
+		return ret;
 	}
 
 	FIL fil;
-	FRESULT ret;
 	UINT bytesread;
 	uint8_t *flash_offset = (uint8_t*)FLASH_START_OFFSET;
 	ret = f_open(&fil, FLASH_FILE, FA_READ);
