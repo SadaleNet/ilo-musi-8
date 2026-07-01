@@ -775,7 +775,7 @@ static void screen_global_config_handler(void) {
 		return;
 	}
 
-	static const uint32_t FEEDBACK_AUDIO_DURATION = FUNCONF_SYSTEM_CORE_CLOCK*2/60; // 2 frames of feedback audio
+	static const uint32_t FEEDBACK_AUDIO_DURATION = FUNCONF_SYSTEM_CORE_CLOCK*20/60; // 20 frames of feedback audio
 	if(systick_now-global_config_buzzer_start_tick >= FEEDBACK_AUDIO_DURATION) {
 		buzzer_set_volume(0);
 	}
