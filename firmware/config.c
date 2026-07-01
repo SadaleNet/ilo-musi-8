@@ -35,7 +35,7 @@
 const struct global_config GLOBAL_CONFIG_DEFAULT = {
 	.version = GLOBAL_CONFIG_VERSION,
 	.volume = 9,
-	.backlight = 5,
+	.backlight = 1,
 	.contrast = 5,
 	.language = 0,
 };
