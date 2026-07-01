@@ -663,14 +663,11 @@ uint8_t file_verify_firmware_update(void) {
 	if(ret == FR_OK) {
 		// Verification completed
 		// Rename firmware file as backup so that the bootloader won't flash it again
-		ret = f_rename(FLASH_FILE, FLASH_FILE_OLD);
-		if (ret == FR_EXIST) {
-			// In case the backup file existed, overwrite the backup with the latest one
-			ret = f_unlink(FLASH_FILE_OLD);
-			if(ret == FR_OK) {
-				ret = f_rename(FLASH_FILE, FLASH_FILE_OLD);
-			}
+		ret = f_unlink(FLASH_FILE_OLD);
+		if(ret == FR_NO_FILE) {
+			ret = FR_OK; // The backup file might not exist, which's ok
 		}
+		ret = f_rename(FLASH_FILE, FLASH_FILE_OLD);
 	}
 
 	file_card_mode_exit();
