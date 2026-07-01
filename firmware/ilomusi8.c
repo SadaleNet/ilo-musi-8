@@ -44,7 +44,10 @@
 #include <string.h>
 #include <assert.h>
 
-#define GAMEPLAY_INSTRUCTION_DURATION_MS (5000U) // Show gameplay instruction for x seconds
+#define GAMEPLAY_INSTRUCTION_DURATION_MS (5000U) // Show gameplay instruction for this long
+#define GAMEPLAY_EXIT_DURATION_MS (3000U) // Tell the user to hold <X> for this long to exit the game
+#define GAMEPLAY_EXIT_BANNER_ROW_POS (3) // The row position of the EXIT banner for warning the user about the exit
+#define GAMEPLAY_EXIT_BANNER_ROW_HEIGHT (2) // How tall the EXIT banner are. Each row is 8px.
 
 extern const uint8_t ICON_NAVIGATION[];
 extern const size_t ICON_NAVIGATION_LENGTH;
@@ -171,6 +174,9 @@ uint8_t last_storage_flag[sizeof(chip8_cfg->storage_flags)/sizeof(*chip8_cfg->st
 uint32_t game_min_cycle_interval;
 uint32_t last_frame_processed_tick;
 uint32_t last_lcd_blit_tick;
+uint8_t game_paused;
+uint32_t game_paused_start_tick;
+uint8_t game_paused_screen_buffer_backup[GAMEPLAY_EXIT_BANNER_ROW_HEIGHT][DISPLAY_WIDTH]; // for showing pause state
 
 static void get_rid_of_all_button_events(void) {
 	// Clean screen reasons:
@@ -347,6 +353,7 @@ static void screen_menu_handler(void) {
 					}
 					last_frame_processed_tick = systick_now - game_min_cycle_interval;
 					last_lcd_blit_tick = systick_now - FUNCONF_SYSTEM_CORE_CLOCK/60;
+					game_paused = false;
 					if(chip8_cfg->input_navigation || chip8_cfg->input_action || chip8_cfg->input_layout) {
 						// If specified in the config INI file, show input buttons and the layout
 						menu_display_update_required = true;
@@ -898,23 +905,46 @@ static void screen_pre_gameplay_handler(void) {
 static void screen_gameplay_handler(void) {
 	if(systick_now - last_frame_processed_tick >= game_min_cycle_interval) { // (60 x CYCLES_PER_FRAME) fps
 		chip8.periph.random_num = SysTick->CNT;
-		chip8.periph.key_held = (uint16_t)chip8_keymap(adc_button_get_state());
-		chip8.periph.key_just_released = (uint16_t)chip8_keymap(adc_button_get_just_released());
-		if(!(chip8.periph.requests & CHIP8_REQUEST_WAIT_DISPLAY_REFRESH)) {
-			chip8_step(&chip8);
-			buzzer_set_volume(chip8.periph.sound_timer > 0 ? global_config.volume : 0);
-			if(chip8.periph.requests & CHIP8_REQUEST_AUDIO_BUFFER_UPDATED) {
-				buzzer_set_buffer(chip8.periph.audio);
-				chip8.periph.requests &= ~CHIP8_REQUEST_AUDIO_BUFFER_UPDATED;
+		uint32_t button_held = chip8_keymap(adc_button_get_state());
+		uint32_t button_just_pressed = chip8_keymap(adc_button_get_just_pressed());
+		uint32_t button_just_released = chip8_keymap(adc_button_get_just_released());
+
+		// Game pause handling
+		if(button_just_pressed & (1<<0x10)) {
+			for(size_t i=0; i<GAMEPLAY_EXIT_BANNER_ROW_HEIGHT; i++) {
+				draw_transfer_row(chip8.periph.display, game_paused_screen_buffer_backup[i], GAMEPLAY_EXIT_BANNER_ROW_POS+i);
+				draw_clear_row(chip8.periph.display, GAMEPLAY_EXIT_BANNER_ROW_POS+i);
 			}
-			if(chip8.periph.requests & CHIP8_REQUEST_AUDIO_PITCH_UPDATED) {
-				buzzer_set_pitch(chip8.periph.audio_pitch);
-				chip8.periph.requests &= ~CHIP8_REQUEST_AUDIO_PITCH_UPDATED;
+			game_paused_start_tick = systick_now;
+			game_paused = true;
+		}
+		if(button_just_released & (1<<0x10)) {
+			for(size_t i=0; i<GAMEPLAY_EXIT_BANNER_ROW_HEIGHT; i++) {
+				draw_clear_row(chip8.periph.display, GAMEPLAY_EXIT_BANNER_ROW_POS+i);
+				draw_bitmap_h8(chip8.periph.display, game_paused_screen_buffer_backup[i], DISPLAY_WIDTH, 0, (GAMEPLAY_EXIT_BANNER_ROW_POS+i)*8);
+			}
+			game_paused = false;
+		}
+
+		if(!game_paused) {
+			chip8.periph.key_held = (uint16_t)button_held;
+			chip8.periph.key_just_released = (uint16_t)button_just_released;
+			if(!(chip8.periph.requests & CHIP8_REQUEST_WAIT_DISPLAY_REFRESH)) {
+				chip8_step(&chip8);
+				buzzer_set_volume(chip8.periph.sound_timer > 0 ? global_config.volume : 0);
+				if(chip8.periph.requests & CHIP8_REQUEST_AUDIO_BUFFER_UPDATED) {
+					buzzer_set_buffer(chip8.periph.audio);
+					chip8.periph.requests &= ~CHIP8_REQUEST_AUDIO_BUFFER_UPDATED;
+				}
+				if(chip8.periph.requests & CHIP8_REQUEST_AUDIO_PITCH_UPDATED) {
+					buzzer_set_pitch(chip8.periph.audio_pitch);
+					chip8.periph.requests &= ~CHIP8_REQUEST_AUDIO_PITCH_UPDATED;
+				}
 			}
 		}
 
-		uint32_t button_just_pressed = chip8_keymap(adc_button_get_just_pressed());
-		if((button_just_pressed & (1<<0x10)) || chip8.periph.requests & CHIP8_REQUEST_HALT_MASK) {
+		bool user_exit = game_paused && systick_now-game_paused_start_tick >= FUNCONF_SYSTEM_CORE_CLOCK/1000*GAMEPLAY_EXIT_DURATION_MS;
+		if(user_exit || chip8.periph.requests & CHIP8_REQUEST_HALT_MASK) {
 			buzzer_set_volume(0);
 
 			if(memcmp(last_storage_flag, chip8.periph.storage_flags, sizeof(chip8.periph.storage_flags))) {
@@ -926,7 +956,7 @@ static void screen_gameplay_handler(void) {
 			if(file_io_result != FR_OK) {
 				menu_display_update_required = true;
 				screen_state = SCREEN_ERROR;
-			} else if((button_just_pressed & (1<<0x10))) {
+			} else if(user_exit) {
 				menu_dir_reload_required = true;
 				screen_state = SCREEN_MENU;
 			} else if (chip8.periph.requests & CHIP8_REQUEST_HALT_EXIT_EMULATOR) {
@@ -942,8 +972,19 @@ static void screen_gameplay_handler(void) {
 	}
 
 	if(systick_now - last_lcd_blit_tick >= FUNCONF_SYSTEM_CORE_CLOCK/60) { // 60fps
-		chip8_timer_step(&chip8);
-		buzzer_set_volume(chip8.periph.sound_timer > 0 ? global_config.volume : 0);
+		if(!game_paused) {
+			chip8_timer_step(&chip8);
+			buzzer_set_volume(chip8.periph.sound_timer > 0 ? global_config.volume : 0);
+		} else {
+			buzzer_set_volume(0); // Do not play any sound when the game's paused
+			// Display exit countdown
+			draw_clear_row(chip8.periph.display, GAMEPLAY_EXIT_BANNER_ROW_POS);
+			draw_clear_row(chip8.periph.display, GAMEPLAY_EXIT_BANNER_ROW_POS+1);
+			draw_text(chip8.periph.display, "HOLD TO EXIT... ", 13, 29);
+			uint8_t digit = (GAMEPLAY_EXIT_DURATION_MS/1000 - (systick_now-game_paused_start_tick)/FUNCONF_SYSTEM_CORE_CLOCK);
+			char str[2]; str[0] = '0' + digit; str[1] = '\0';
+			draw_text(chip8.periph.display, str, 109, 29);
+		}
 		// There's no double-buffering for saving 1kB of RAM.
 		// There still won't be tearing because the LCD's response time
 		// is slow enough to have any tearing visible

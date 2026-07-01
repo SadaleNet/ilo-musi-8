@@ -27,5 +27,7 @@
 #include <stdint.h>
 
 void draw_clear(uint8_t *buffer);
+void draw_transfer_row(uint8_t *buffer, uint8_t *bitmap, uint8_t row); // Copy buffer into bitmap. Each row is 8px.
+void draw_clear_row(uint8_t *buffer, uint8_t row);
 void draw_bitmap_h8(uint8_t *buffer, const uint8_t *bitmap, uint8_t w, uint8_t x, uint8_t y); // height is always 8. Does not support negative x y because it isn't needed.
 void draw_text(uint8_t *buffer, const char *text, uint8_t x, uint8_t y);

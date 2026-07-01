@@ -31,6 +31,18 @@ void draw_clear(uint8_t *buffer) {
 	memset(buffer, 0, DISPLAY_WIDTH*DISPLAY_HEIGHT/8);
 }
 
+void draw_transfer_row(uint8_t *buffer, uint8_t *bitmap, uint8_t row) {
+	for(size_t i=0; i<DISPLAY_WIDTH; i++) {
+		bitmap[i] = buffer[i*DISPLAY_HEIGHT/8+row];
+	}
+}
+
+void draw_clear_row(uint8_t *buffer, uint8_t row) {
+	for(size_t i=0; i<DISPLAY_WIDTH; i++) {
+		buffer[i*DISPLAY_HEIGHT/8+row] = 0;
+	}
+}
+
 void draw_bitmap_h8(uint8_t *buffer, const uint8_t *bitmap, uint8_t w, uint8_t x, uint8_t y) {
 	for(size_t i=0; i<w && x+i<DISPLAY_WIDTH; i++) {
 		if(y < DISPLAY_HEIGHT) {
