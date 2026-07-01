@@ -29,7 +29,7 @@
 void tim1_pwm_init(void) {
 	// TIM1 is shared by buzzer and LCD backlight.
 	// It provides very high frequency clock for driving PWM signal
-	// The PWM frequency is 3.2Mhz. The duty cycle can be set to 0~15. 0 is always LOW. 15 is always HIGH.
+	// The PWM frequency is 400khz. The duty cycle can be set to 0~15. 0 is always LOW. 15 is always HIGH.
 	// TIM1_CH1N is used for Buzzer audio playback. Use TIM1->CH1CVR to adjust duty cycle.
 	// TIM1_CH3 is used for LCD backlight. Use TIM1->CH3CVR to adjust duty cycle.
 
@@ -39,7 +39,7 @@ void tim1_pwm_init(void) {
 	// Enable the TIM1 clock source
 	RCC->PB2PCENR |= RCC_TIM1EN;
 
-	TIM1->PSC = 0x0000; // Prescaler is 1
+	TIM1->PSC = 0x0007; // Prescaler is 8
 	TIM1->ATRLR = 14; // Autoreload value is 14, allowing CHxCVR value range of 0~15.
 	TIM1->CCER |= TIM1_CCER_CC1NE | // Enable TIM1_CH1N output, not flipping polarity because TIM1_CCER_CC1NP is not specified
 					TIM1_CCER_CC3E; // Enable TIM1_CH3 output, not flipping polarity because TIM1_CCER_CC3P is not specified

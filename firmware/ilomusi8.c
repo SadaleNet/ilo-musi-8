@@ -207,7 +207,7 @@ static void apply_volume_with_feedback_sound(void) {
 
 static void apply_brightness(void) {
 	assert(global_config.backlight < GLOBAL_CONFIG_MAX_VALUE);
-	static const uint8_t BRIGHTNESS_MAP[GLOBAL_CONFIG_MAX_VALUE] = {0, 3, 4, 5, 6, 7, 8, 10, 12, 15};
+	static const uint8_t BRIGHTNESS_MAP[GLOBAL_CONFIG_MAX_VALUE] = {0, 1, 2, 3, 5, 6, 7, 9, 11, 15};
 	lcd_set_brightness(BRIGHTNESS_MAP[global_config.backlight]);
 }
 
