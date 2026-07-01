@@ -218,21 +218,24 @@ static void apply_contrast(void) {
 }
 
 static void screen_error_handler(void) {
-	uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
-	if(button_press & (1<<0x10)) {
-		menu_current_dir[0] = '\0';
-		menu_cache_invalidated = true;
-		menu_offset = 0;
-		menu_dir_reload_required = true;
-		screen_state = SCREEN_MENU;
-	} else if((button_press & (1<<0xD))) { // Allows visiting global config screen with D button even with card error
-		memcpy(&global_config_backup, &global_config, sizeof(global_config_backup));
-		screen_state = SCREEN_GLOBAL_CONFIG;
-		menu_display_update_required = true;
-	}
+	bool device_disabled = (file_io_result == FR_LOW_BATTERY);
+	if(!device_disabled) {
+		uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
+		if(button_press & (1<<0x10)) {
+			menu_current_dir[0] = '\0';
+			menu_cache_invalidated = true;
+			menu_offset = 0;
+			menu_dir_reload_required = true;
+			screen_state = SCREEN_MENU;
+		} else if((button_press & (1<<0xD))) { // Allows visiting global config screen with D button even with card error
+			memcpy(&global_config_backup, &global_config, sizeof(global_config_backup));
+			screen_state = SCREEN_GLOBAL_CONFIG;
+			menu_display_update_required = true;
+		}
 
-	if(screen_state != SCREEN_ERROR) {
-		return;
+		if(screen_state != SCREEN_ERROR) {
+			return;
+		}
 	}
 
 	if(menu_display_update_required) {
@@ -266,17 +269,15 @@ static void screen_error_handler(void) {
 			break;
 			case FR_LOW_BATTERY:
 				draw_text(chip8.periph.display, "LOW BATTERY", 0, 20);
-				draw_text(chip8.periph.display, "CARD WRITE DISABLED", 0, 30);
-			break;
-			case FR_VERY_LOW_BATTERY:
-				draw_text(chip8.periph.display, "VERY LOW BATTERY", 0, 20);
 				draw_text(chip8.periph.display, "PLEASE REPLACE", 0, 30);
 			break;
 			default:
 			break;
 		}
-		if(file_io_result != FR_VERY_LOW_BATTERY) {
+		if(!device_disabled) {
 			draw_text(chip8.periph.display, "PRESS <X> TO RETRY", 0, 48);
+		} else {
+			draw_text(chip8.periph.display, "DEVICE DISABLED", 0, 48);
 		}
 		draw_text(chip8.periph.display, "XXXXXXXXXXXXXXXXXXXXX", 0, 58);
 		lcd_transfer_begin(chip8.periph.display);
@@ -1110,7 +1111,7 @@ int main() {
 	last_frame_processed_tick = SysTick->CNT;
 	last_lcd_blit_tick = SysTick->CNT;
 
-	while(1) {
+	while(true) {
 		file_loop();
 
 		systick_now = SysTick->CNT;

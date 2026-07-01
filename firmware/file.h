@@ -35,7 +35,6 @@
 #define FR_PATH_LENGTH_ERROR (92) // Directory recursion limit reached
 #define FR_FIRMWARE_VERIFICATION_ERROR (93) // The firwmare verification failed
 #define FR_LOW_BATTERY (94) // Low battery (<3000mV). The card is put into read-only mode.
-#define FR_VERY_LOW_BATTERY (95) // Very low battery (<2700mV). Card access disabled.
 
 #define CHIP8_QUIRK_PLATFORM_VIP (CHIP8_QUIRK_VBLANK|CHIP8_QUIRK_LOGIC) // 0x00000060
 #define CHIP8_QUIRK_PLATFORM_SCHIP (CHIP8_QUIRK_SHIFT|CHIP8_QUIRK_MEMORY_LEAVE_I_UNCHANGED|CHIP8_QUIRK_JUMP|CHIP8_QUIRK_HIRES_COLLISION)  // 0x00000413

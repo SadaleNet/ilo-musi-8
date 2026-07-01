@@ -45,11 +45,7 @@
 #define FLASH_START_OFFSET (0x08000000)
 #define FLASH_END_OFFSET (0x0800F800)
 
-#define CARD_READ_VOLTAGE_LIMIT (2700) // Prevents card read if the supply voltage is lower than that. Unit is mV
-#define CARD_WRITE_VOLTAGE_LIMIT (3000) // Same as above except for card write.
-// Deadband for card write. The error's only resolved if the voltage get this high above the threshold.
-// Card read error would never get resolved because the battery's essentially dead
-#define CARD_WRITE_VOLTAGE_DEADBAND (100)
+#define LOW_BATTERY_THRESHOLD (3000) // Disable device for card protection if this internal voltage's reached. Unit is mV
 
 #define STORAGE_FLAG_FILE "FX75FX85.BIN"
 
@@ -107,7 +103,7 @@ static FRESULT mount_filesystem(void) {
 	return f_mount(&filesystem, "", 1);
 }
 
-static uint8_t file_card_mode_enter(bool write_operation) {
+static uint8_t file_card_mode_enter(void) {
 	uint8_t ret = FR_OK;
 	if(mount_result != FR_OK) {
 		// If not mounted, give it a chance to mount right now!
@@ -127,23 +123,12 @@ static uint8_t file_card_mode_enter(bool write_operation) {
 	// This check's performed regardless of mount_result so that when the error screen
 	// get shown, the battery error would have higher priority than mount errors.
 	uint32_t supply_voltage = adc_get_supply_voltage();
-	static bool read_voltage_failure_triggered = false;
-	static bool write_voltage_failure_triggered = false;
-
-	if(!read_voltage_failure_triggered && supply_voltage < CARD_READ_VOLTAGE_LIMIT) {
-		read_voltage_failure_triggered = true;
+	static bool battery_failure_triggered = false;
+	if(!battery_failure_triggered && supply_voltage < LOW_BATTERY_THRESHOLD) {
+		battery_failure_triggered = true; // Once triggered, never resume
 	}
-	
-	if(!write_voltage_failure_triggered && supply_voltage < CARD_WRITE_VOLTAGE_LIMIT) {
-		write_voltage_failure_triggered = true;
-	} else if(write_voltage_failure_triggered && supply_voltage >= CARD_WRITE_VOLTAGE_LIMIT+CARD_WRITE_VOLTAGE_DEADBAND) {
-		write_voltage_failure_triggered = false;
-	}
-	
-	if(read_voltage_failure_triggered) {
-		ret = FR_VERY_LOW_BATTERY; // Prevents card read
-	} else if(write_operation && write_voltage_failure_triggered) {
-		ret = FR_LOW_BATTERY; // Prevents card write
+	if(battery_failure_triggered) {
+		ret = FR_LOW_BATTERY; // Prevents card read
 	}
 
 	// Must wait for transfer completion before setting mode, even if we're setting it to SPI_MODE_LCD
@@ -376,7 +361,7 @@ static bool file_parse_ini(struct ini_parser *parser, const char *buffer, size_t
 }
 
 uint8_t file_load_config(const char *path, struct chip8_config *chip8_cfg) {
-	uint8_t ret = file_card_mode_enter(false);
+	uint8_t ret = file_card_mode_enter();
 	if(ret != FR_OK) {
 		return ret;
 	}
@@ -437,7 +422,7 @@ uint8_t file_load_config(const char *path, struct chip8_config *chip8_cfg) {
 }
 
 uint8_t file_save_storage_flag(const uint8_t *storage_flags, size_t flag_size) {
-	uint8_t ret = file_card_mode_enter(true);
+	uint8_t ret = file_card_mode_enter();
 	if(ret != FR_OK) {
 		return ret;
 	}
@@ -465,7 +450,7 @@ int file_print_hex_buffer(char *dest, const uint8_t *buffer, size_t buffer_size)
 }
 
 uint8_t file_save_config(const char *path, const struct chip8_config *chip8_cfg) {
-	uint8_t ret = file_card_mode_enter(true);
+	uint8_t ret = file_card_mode_enter();
 	if(ret != FR_OK) {
 		return ret;
 	}
@@ -537,7 +522,7 @@ uint8_t file_save_config(const char *path, const struct chip8_config *chip8_cfg)
 }
 
 uint8_t file_load_rom(const char *path, const struct chip8_config *chip8_cfg, struct chip8_machine *chip8_machine) {
-	uint8_t ret = file_card_mode_enter(false);
+	uint8_t ret = file_card_mode_enter();
 	if(ret != FR_OK) {
 		return ret;
 	}
@@ -557,7 +542,7 @@ uint8_t file_load_rom(const char *path, const struct chip8_config *chip8_cfg, st
 }
 
 static uint8_t file_readdir_from_card(const char *path, size_t offset, char (*filelist)[14], size_t *count) {
-	uint8_t ret = file_card_mode_enter(false);
+	uint8_t ret = file_card_mode_enter();
 	if(ret != FR_OK) {
 		return ret;
 	}
@@ -673,9 +658,8 @@ uint8_t file_readdir(const char *path, bool changed, size_t offset, char (*filel
 }
 
 uint8_t file_verify_firmware_update(void) {
-	// Intentionally set write_operation=true because of possible file rename
 	// Since this function always got run on boot, it also double as a mechanism for showing low battery warning on boot
-	uint8_t ret = file_card_mode_enter(true);
+	uint8_t ret = file_card_mode_enter();
 	if(ret != FR_OK) {
 		return ret;
 	}
