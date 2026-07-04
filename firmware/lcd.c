@@ -103,10 +103,12 @@ static void lcd_transfer_next_row(void) {
 		lcd_dma_buffer_row[i] = lcd_dma_buffer[i*DISPLAY_HEIGHT/8+lcd_dma_row_index];
 	}
 
-	// write memory barrier to make sure that the content of lcd_dma_buffer_row is correct to the DMA
+	// write memory barrier to make sure that the content of lcd_dma_buffer_row is updated to the DMA
 	asm volatile("fence ow,ow" ::: "memory");
 	DMA1_Channel3->MADDR = (uint32_t)lcd_dma_buffer_row; // memory source
 	DMA1_Channel3->CNTR = DISPLAY_WIDTH; // number of items to write
+	SPI1->CTLR2 |= SPI_CTLR2_TXDMAEN;
+	DMA1_Channel3->CFGR |= DMA_CFGR1_EN;
 }
 
 void INTERRUPT_DECORATOR DMA1_Channel3_IRQHandler(void) {
@@ -114,6 +116,8 @@ void INTERRUPT_DECORATOR DMA1_Channel3_IRQHandler(void) {
 	// Must wait for completion of SPI transfer before changing the LCD control lines
 	// DMA SPI TX transfer compelte only look for TXE flag and doesn't wait for BSY flag
 	while(SPI1->STATR & SPI_STATR_BSY){}
+	DMA1_Channel3->CFGR &= ~DMA_CFGR1_EN;
+	SPI1->CTLR2 &= ~SPI_CTLR2_TXDMAEN;
 
 	if(adc_card_has_insert_event()) {
 		// Card insertion event detected
@@ -156,29 +160,6 @@ void lcd_init_first_stage(void) {
 	// GPIO PC1, PC2, PC4 is output PUSH-PULL, PC3 is output ALT PUSH-PULL
 	GPIOC->CFGLR &= ~((GPIO_CFGLR_MASK << (4*1)) | (GPIO_CFGLR_MASK << (4*2)) | (GPIO_CFGLR_MASK << (4*3)) | (GPIO_CFGLR_MASK << (4*4)));
 	GPIOC->CFGLR |= (GPIO_CFGLR_OUT_PP << (4*1)) | (GPIO_CFGLR_OUT_PP << (4*2)) | (GPIO_CFGLR_OUT_AF_PP << (4*3)) | (GPIO_CFGLR_OUT_PP << (4*4));
-
-	// Enable DMA (other component may also enable DMA on their own. No harm to enable it multiple times.)
-	RCC->HBPCENR |= RCC_DMA1EN;
-
-	// Configure DMA for SPI
-	DMA1_Channel3->PADDR = (uint32_t)(&SPI1->DATAR); // Peripheral address register
-
-	DMA1_Channel3->CFGR =
-		// (Not specifying DMA_CFGR1_PL) Set the priority to "Low"
-		// (Not specifying DMA_CFGR1_PSIZE) 8bit data for peripheral
-		// (Not specifying DMA_CFGR1_MSIZE) 8bit data for memory
-		DMA_CFGR1_MINC | // Incrememt memory address
-		DMA_CFGR1_DIR | // Read from memory, write to peripheral
-		DMA_CFGR1_TCIE | // Enable transfer-complete interrupt
-		DMA_CFGR1_EN; // Enable channel
-
-	// Clear the interrupt flag, just in case.
-	DMA1->INTFCR |= DMA_CTCIF3;
-
-	// Configure interrupt controller
-	// PFIC: Enable interrupt for DMA1_Channel3_IRQn
-	PFIC->IPRIOR[DMA1_Channel3_IRQn] = 0x80; // The priority is 0x80 (the highest but that it can be preempted)
-	PFIC->IENR[DMA1_Channel3_IRQn/32] |= (1<<(DMA1_Channel3_IRQn%32));
 
 	lcd_dma_transfer_in_progress = false;
 	lcd_contrast = LCD_DEFAULT_CONTRAST;

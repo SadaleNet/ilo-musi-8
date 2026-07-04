@@ -140,8 +140,10 @@ void adc_button_scan_next_row(void) {
 	}
 
 	// Configure DMA for the next read
+	DMA1_Channel1->CFGR &= ~DMA_CFGR1_EN; // As per the specs, must disable DMA channel before configuring it
 	DMA1_Channel1->MADDR = (uint32_t)&adc_dma_buffer[ROW_SCAN_SEQUENCE_CHANNEL_COUNT*row_scan_index]; // memory destination
 	DMA1_Channel1->CNTR = ROW_SCAN_SEQUENCE_CHANNEL_COUNT; // number of items to read
+	DMA1_Channel1->CFGR |= DMA_CFGR1_EN; // Re-enable the DMA channel
 
 	// Configure GPIO for button scanning. The scanning row pin is set to output (which's set to HIGH inside adc_init()). Other pins are set to analog input.
 	GPIOD->CFGLR &= ~((GPIO_CFGLR_MASK<<(4*2)) | (GPIO_CFGLR_MASK<<(4*3)) | (GPIO_CFGLR_MASK<<(4*4)) | (GPIO_CFGLR_MASK<<(4*5)) | (GPIO_CFGLR_MASK<<(4*6))); // Set PD2..6 to analog input
@@ -194,13 +196,12 @@ void adc_init(void) {
 	DMA1_Channel1->PADDR = (uint32_t)(&ADC1->RDATAR); // Peripheral address register
 
 	DMA1_Channel1->CFGR =
-		DMA_CFGR1_PL_1 | // Set the priority to "High"
+		DMA_CFGR1_PL_0 | // Set the priority to "Medium"
 		DMA_CFGR1_PSIZE_0 | // 16bit data for peripheral
 		DMA_CFGR1_MSIZE_1 | // 32bit data for memory
 		DMA_CFGR1_MINC | // Incrememt memory address
 		// (Not specifying DMA_CFGR1_DIR) Read from peripheral, write to memory
-		DMA_CFGR1_TCIE | // Enable transfer-complete interrupt
-		DMA_CFGR1_EN; // Enable channel
+		DMA_CFGR1_TCIE; // Enable transfer-complete interrupt
 
 	// Clear the interrupt flag, just in case.
 	DMA1->INTFCR |= DMA_CTCIF1;
@@ -230,6 +231,8 @@ void adc_init(void) {
 	// PFIC: Enable interrupt for DMA1_Channel1_IRQn
 	PFIC->IPRIOR[DMA1_Channel1_IRQn] = 0x00; // The priority is 0 (the highest, and it cannot be preempted)
 	PFIC->IENR[DMA1_Channel1_IRQn/32] |= (1<<(DMA1_Channel1_IRQn%32));
+
+	DMA1_Channel1->CFGR |= DMA_CFGR1_EN; // Enable DMA channel
 
 	// Initialize variables
 	asm volatile("" ::: "memory");

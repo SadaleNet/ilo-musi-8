@@ -108,7 +108,6 @@ static uint8_t file_card_mode_enter(void) {
 	if(mount_result != FR_OK) {
 		// If not mounted, give it a chance to mount right now!
 		if(adc_card_is_inserted()) {
-			while(lcd_is_transfer_in_progress()){}
 			spi_set_mode(SPI_MODE_MEMORY_CARD_SLOW);
 			mount_result = mount_filesystem();
 		}
@@ -133,7 +132,6 @@ static uint8_t file_card_mode_enter(void) {
 
 	// Must wait for transfer completion before setting mode, even if we're setting it to SPI_MODE_LCD
 	// Otherwise it can break the on-going LCD transfer
-	while(lcd_is_transfer_in_progress()){}
 	spi_set_mode(ret == FR_OK ? SPI_MODE_MEMORY_CARD : SPI_MODE_LCD);
 
 	// If the return value is FR_OK, The SPI bus would be in SPI_MODE_MEMORY_CARD and the caller function must
@@ -165,7 +163,6 @@ void file_loop(void) {
 		mount_result = FR_NOT_READY;
 	}
 	if(adc_card_has_insert_event()) {
-		while(lcd_is_transfer_in_progress()){}
 		spi_set_mode(SPI_MODE_MEMORY_CARD_SLOW);
 		mount_result = mount_filesystem();
 		spi_set_mode(SPI_MODE_LCD);
@@ -658,7 +655,6 @@ uint8_t file_readdir(const char *path, bool changed, size_t offset, char (*filel
 }
 
 uint8_t file_verify_firmware_update(void) {
-	// Since this function always got run on boot, it also double as a mechanism for showing low battery warning on boot
 	uint8_t ret = file_card_mode_enter();
 	if(ret != FR_OK) {
 		return ret;

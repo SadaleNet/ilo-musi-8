@@ -27,3 +27,4 @@
 #include <stdint.h>
 
 int util_print_button_buffer(char *dest, uint16_t buttons); // dest minimum size: 17
+uint16_t util_endian_swap_16(uint16_t value);

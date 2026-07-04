@@ -63,7 +63,9 @@ static void buzzer_reload_dma_buffer(void) {
 	}
 	// write memory barrier to flush the content of the buffer for DMA to load
 	asm volatile("fence ow,ow" ::: "memory");
+	DMA1_Channel4->CFGR &= ~DMA_CFGR1_EN; // Disable DMA channel before reconfiguring it
 	DMA1_Channel4->MADDR = (uint32_t)(buzzer_dma_buffer[new_buffer_index]); // Memory address register
+	DMA1_Channel4->CFGR |= DMA_CFGR1_EN; // Re-enable the DMA channel
 	buzzer_dma_buffer_index = new_buffer_index;
 }
 
@@ -89,7 +91,7 @@ void buzzer_init(void) {
 	RCC->PB1PCENR |= RCC_TIM3EN;
 
 	// DMA got triggered when the comparison register matches this value
-	// That'd be 0, the same as teh default value. No need to change that
+	// That'd be 0, the same as the default value. No need to change that
 	// Commeting out
 	//TIM3->CH4CVR = 0;
 	TIM3->DMAINTENR |= TIM3_DMAINTENR_CC4DE | TIM3_DMAINTENR_OC4PE;
@@ -105,18 +107,19 @@ void buzzer_init(void) {
 	memset(buzzer_dma_buffer, 0, sizeof(buzzer_dma_buffer));
 	buzzer_current_volume = 0;
 	buzzer_set_pitch(0);
-	buzzer_reload_dma_buffer();
 
 	DMA1_Channel4->PADDR = (uint32_t)(&TIM1->CH1CVR); // Peripheral address register
 	DMA1_Channel4->CNTR = BUZZER_BUFFER_LENGTH;
 	DMA1_Channel4->CFGR =
-		(DMA_CFGR1_PL_0 | DMA_CFGR1_PL_1) | // Set the priority to "Very High"
+		DMA_CFGR1_PL_1 | // Set the priority to "High"
 		DMA_CFGR1_PSIZE_0 | // 16bit data for peripheral
 		// (Not specifying DMA_CFGR1_MSIZE) 8bit data for memory
 		DMA_CFGR1_MINC | // Incrememt memory address
 		DMA_CFGR1_CIRC | // Enable cycle mode
-		DMA_CFGR1_DIR | // Read from memory, write to peripheral
-		DMA_CFGR1_EN; // Enable channel
+		DMA_CFGR1_DIR; // Read from memory, write to peripheral
+
+	// This function also enables the DMA
+	buzzer_reload_dma_buffer();
 
 	// Configure PD0 as AF_PP after everything else's ready
 	GPIOD->CFGLR &= ~(GPIO_CFGLR_MASK << (4*0));

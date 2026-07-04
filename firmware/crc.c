@@ -26,47 +26,24 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <string.h>
-#include <assert.h>
 
-int util_print_button_buffer(char *dest, uint16_t buttons) {
-	int ret = 0;
-	for(size_t i=0; i<16; i++) {
-		if(buttons & (1<<i)) {
-			if(i < 10) {
-				dest[ret++] = i + '0';
-			} else {
-				dest[ret++] = i - 10 + 'A';
-			}
-		}
+uint8_t crc7_compute(const uint8_t table[256], uint8_t crc, const uint8_t *payload, size_t length) {
+	for(size_t i=0; i<length; i++) {
+		crc = table[(crc<<1) ^ payload[i]];
 	}
-	dest[ret] = '\0';
-	return ret;
+	return crc & 0x7F;
 }
 
-uint16_t util_endian_swap_16(uint16_t value) {
-	return ((value & 0xFF) << 8) | (value >> 8);
-}
-
-void __assert_func(const char*, int, const char*, const char*) {
-	while(1);
-}
-
-void qsort(void* ptr, size_t count, size_t size, int (*comp)(const void*, const void*)) {
-	// Implements insertion sort
-	uint8_t buf[16];
-	assert(size <= sizeof(buf));
-	for(size_t i=1; i<count; i++) {
-		memcpy(buf, &((uint8_t*)ptr)[i*size], size);
-		size_t j;
-		for(j=i; j>=1; j--) {
-			if(comp(buf, &((uint8_t*)ptr)[(j-1)*size]) >= 0) {
-				break;
-			}
-		}
-		if(j < i) {
-			memmove(&((uint8_t*)ptr)[(j+1)*size], &((uint8_t*)ptr)[j*size], (i-j)*size);
-			memcpy(&((uint8_t*)ptr)[j*size], buf, size);
-		}
+uint16_t crc16_compute(const uint16_t table[256], uint16_t crc, const uint8_t *payload, size_t length) {
+	for(size_t i=0; i<length; i++) {
+		crc = (crc<<8) ^ table[(crc>>8) ^ payload[i]];
 	}
+	return crc;
+}
+
+uint32_t crc32_compute(const uint32_t table[256], uint32_t crc, const uint8_t *payload, size_t length) {
+	for(size_t i=0; i<length; i++) {
+		crc = (crc<<8) ^ table[(crc>>24) ^ payload[i]];
+	}
+	return crc;
 }

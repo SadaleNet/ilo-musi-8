@@ -3,7 +3,7 @@
 /-------------------------------------------------------------------------/
 /
 /  Copyright (C) 2019, ChaN, all right reserved.
-/  Copyright (C) 2024, Wong Cho Ching, all right reserved.
+/  Copyright (C) 2024~2026, Wong Cho Ching <https://sadale.net/>, all right reserved.
 /
 / * This software is a free software and there is NO WARRANTY.
 / * No restriction on use. You can use, modify and redistribute it for
@@ -28,12 +28,50 @@
 /-------------------------------------------------------------------------*/
 
 // Code adapted from FatFS's sample generic/sdmm.c
+// CRC feature has been added and implemented
+
+#include "crc.h"
+#include "util.h"
 
 #include "ff.h"		/* Obtains integer types for FatFs */
 #include "diskio.h"	/* Common include file for FatFs and disk I/O layer */
 
 #include "ch32fun.h"
+#include <assert.h>
 
+static const uint8_t DUMMY_TX_BUFFER[512] = {
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 /* MMC card type flags (MMC_GET_TYPE) */
 #define CT_MMC3		0x01		/* MMC ver 3 */
@@ -83,6 +121,7 @@
 #define CMD38	(38)		/* ERASE */
 #define CMD55	(55)		/* APP_CMD */
 #define CMD58	(58)		/* READ_OCR */
+#define CMD59	(59)		/* CRC_ON_OFF */
 
 
 static
@@ -116,6 +155,36 @@ void xmit_mmc (
 	while((SPI1->STATR & SPI_STATR_BSY)){} // Wait until transfer completed
 }
 
+static uint16_t xmit_mmc_with_crc (
+	const BYTE* buff,	/* Data to be sent */
+	UINT bc				/* Number of bytes to send */
+)
+{
+	// Enable DMA signal for SPI
+	SPI1->CTLR2 |= SPI_CTLR2_TXDMAEN;
+
+	asm volatile("fence ow,ow" ::: "memory"); // Make sure that the content of buff is updated to DMA
+	// SPI TX DMA
+	DMA1_Channel3->MADDR = (uint32_t)buff; // memory source
+	DMA1_Channel3->CNTR = bc; // number of items to write
+
+	// Kick off the DMA!
+	DMA1_Channel3->CFGR |= DMA_CFGR1_EN;
+
+	// While the SPI's busy, the CPU's gonna compute the CRC
+	uint16_t crc = crc16_compute(CRC16_TABLE, 0, buff, bc);
+
+	while(DMA1_Channel3->CNTR || (SPI1->STATR & SPI_STATR_BSY)){}
+
+	// Clean up DMA config after use
+	SPI1->CTLR2 &= ~SPI_CTLR2_TXDMAEN;
+	DMA1_Channel3->CFGR &= ~DMA_CFGR1_EN;
+
+	// Discard the unused SPI byte from the buffer
+	SPI1->DATAR;
+
+	return crc;
+}
 
 
 /*-----------------------------------------------------------------------*/
@@ -141,6 +210,55 @@ void rcvr_mmc (
 	while((SPI1->STATR & SPI_STATR_BSY)){} // Wait until transfer completed
 }
 
+static uint16_t rcvr_mmc_with_crc (
+	BYTE *buff,	/* Pointer to read buffer */
+	UINT bc	/* Number of bytes to receive */
+)
+{
+	// The hardware SPI CRC cannot be used because for CRC16, it requires setting SPI to 16bit mode.
+	// Unfortunately, due to the difference in endianness of the peripheral and the data buffer,
+	// the hardware SPI CRC simply won't work.
+	uint16_t crc = 0;
+
+	assert(bc <= sizeof(DUMMY_TX_BUFFER));
+
+	// (Since the content of DUMMY_TX_BUFFER never changes, memory barrier isn't needed.)
+	// Enable DMA signal for SPI
+	SPI1->CTLR2 |= SPI_CTLR2_TXDMAEN|SPI_CTLR2_RXDMAEN;
+	// SPI RX DMA
+	DMA1_Channel2->MADDR = (uint32_t)buff; // memory destination
+	DMA1_Channel2->CNTR = bc; // number of items to read
+	// SPI TX DMA
+	DMA1_Channel3->MADDR = (uint32_t)DUMMY_TX_BUFFER; // memory source
+	DMA1_Channel3->CNTR = bc; // number of items to write
+
+	// Kick off the DMA!
+	DMA1_Channel2->CFGR |= DMA_CFGR1_EN;
+	DMA1_Channel3->CFGR |= DMA_CFGR1_EN;
+
+	// While DMA is transfering the data, the CPU's calculating the CRC
+	size_t i = 0;
+	uint32_t cntr_prev = bc;
+	while(i < bc) {
+		uint32_t cntr = DMA1_Channel2->CNTR;
+		size_t new_data_count = cntr_prev - cntr;
+		if(new_data_count > 0) {
+			asm volatile("fence ir,ir" ::: "memory"); // Make sure that the content of buff is ready to be read by CPU
+			crc = crc16_compute(CRC16_TABLE, crc, &buff[i], new_data_count);
+			i += new_data_count;
+		}
+		cntr_prev = cntr;
+	}
+	// Wait until SPI transfer completion
+	while((SPI1->STATR & SPI_STATR_BSY)){}
+
+	// Clean up DMA config after use
+	SPI1->CTLR2 &= ~(SPI_CTLR2_TXDMAEN|SPI_CTLR2_RXDMAEN);
+	DMA1_Channel2->CFGR &= ~DMA_CFGR1_EN;
+	DMA1_Channel3->CFGR &= ~DMA_CFGR1_EN;
+
+	return crc;
+}
 
 
 /*-----------------------------------------------------------------------*/
@@ -212,18 +330,19 @@ int rcvr_datablock (	/* 1:OK, 0:Failed */
 	BYTE d[2];
 	UINT tmr;
 
-
-	for (tmr = 100; tmr; tmr--) {	/* Wait for data packet in timeout of 100ms */
+	for (tmr = 100; tmr; tmr--) {					/* Wait for data packet in timeout of 100ms */
 		rcvr_mmc(d, 1);
 		if (d[0] != 0xFF) break;
 		Delay_Ms(1);
 	}
-	if (d[0] != 0xFE) return 0;		/* If not valid data token, return with error */
+	if (d[0] != 0xFE) return 0;						/* If not valid data token, return with error */
 
-	rcvr_mmc(buff, btr);			/* Receive the data block into buffer */
-	rcvr_mmc(d, 2);					/* Discard CRC */
-
-	return 1;						/* Return with success */
+	uint16_t crc = rcvr_mmc_with_crc(buff, btr);	/* Receive the data block into buffer */
+	rcvr_mmc(d, 2);									/* Obtain CRC */
+	if(crc != util_endian_swap_16(*(uint16_t*)d)) {
+		return 0;									/* CRC mismatch. Report error. */
+	}
+	return 1;										/* Return with success */
 }
 
 
@@ -244,12 +363,13 @@ int xmit_datablock (	/* 1:OK, 0:Failed */
 	if (!wait_ready()) return 0;
 
 	d[0] = token;
-	xmit_mmc(d, 1);				/* Xmit a token */
-	if (token != 0xFD) {		/* Is it data token? */
-		xmit_mmc(buff, 512);	/* Xmit the 512 byte data block to MMC */
-		rcvr_mmc(d, 2);			/* Xmit dummy CRC (0xFF,0xFF) */
-		rcvr_mmc(d, 1);			/* Receive data response */
-		if ((d[0] & 0x1F) != 0x05)	/* If not accepted, return with error */
+	xmit_mmc(d, 1);										/* Xmit a token */
+	if (token != 0xFD) {								/* Is it data token? */
+		uint16_t crc = xmit_mmc_with_crc(buff, 512);	/* Xmit the 512 byte data block to MMC */
+		*(uint16_t*)d = util_endian_swap_16(crc);		/* Prepare CRC */
+		xmit_mmc(d, 2);									/* Xmit CRC */
+		rcvr_mmc(d, 1);									/* Receive data response */
+		if ((d[0] & 0x1F) != 0x05)						/* If not accepted, return with error */
 			return 0;
 	}
 
@@ -291,14 +411,7 @@ BYTE send_cmd (		/* Returns command response (bit7==1:Send failed)*/
 	buf[2] = (BYTE)(arg >> 16);		/* Argument[23..16] */
 	buf[3] = (BYTE)(arg >> 8);		/* Argument[15..8] */
 	buf[4] = (BYTE)arg;				/* Argument[7..0] */
-	n = 0x01;						/* Dummy CRC + Stop */
-	if (cmd == CMD0) n = 0x95;		/* (valid CRC for CMD0(0)) */
-	if (cmd == CMD1) n = 0xF9;		/* (valid CRC for CMD1(0)) */
-	if (cmd == CMD8) n = 0x87;		/* (valid CRC for CMD8(0x1AA)) */
-	if (cmd == CMD55) n = 0x65;		/* (valid CRC for CMD55(0)) */
-	if (cmd == ACMD41 && arg == 0x40000000) n = 0x77;		/* (valid CRC for ACMD41(0x40000000)) */
-	if (cmd == ACMD41 && arg == 0) n = 0xE5;		/* (valid CRC for ACMD41(0)) */
-	buf[5] = n;
+	buf[5] = (crc7_compute(CRC7_TABLE, 0, buf, 5) << 1) | 0x01;	/* CRC + Stop */
 	xmit_mmc(buf, 6);
 
 	/* Receive command response */
@@ -358,7 +471,6 @@ DSTATUS disk_initialize (
 	ty = 0;
 
 	/* Retry for up to 100 times. See https://electronics.stackexchange.com/a/238217 */
-	/* It's empirically found that retrying 5 times isn't enough for slow SD cards. */
 	for (tmr = 100; tmr; tmr--) { /* Enter Idle state. */
 		if (send_cmd(CMD0, 0) == 1) {
 			break;
@@ -366,38 +478,42 @@ DSTATUS disk_initialize (
 		Delay_Ms(1);
 	}
 
-	{
-		if (send_cmd(CMD8, 0x1AA) == 1) {	/* SDv2? */
-			rcvr_mmc(buf, 4);							/* Get trailing return value of R7 resp */
-			if (buf[2] == 0x01 && buf[3] == 0xAA) {		/* The card can work at vdd range of 2.7-3.6V */
-				for (tmr = 1000; tmr; tmr--) {			/* Wait for leaving idle state (ACMD41 with HCS bit) */
-					BYTE response = send_cmd(ACMD41, 1UL << 30);
-					if (response == 0) break;
-					else if (response == 0xFF) tmr = tmr > 100 ? tmr-100 : 1;
-					Delay_Ms(1);
-				}
-				if (tmr && send_cmd(CMD58, 0) == 0) {	/* Check CCS bit in the OCR */
-					rcvr_mmc(buf, 4);
-					ty = (buf[0] & 0x40) ? CT_SDC2 | CT_BLOCK : CT_SDC2;	/* SDv2+ */
-				}
-			}
-		} else {							/* SDv1 or MMCv3 */
-			if (send_cmd(ACMD41, 0) <= 1) 	{
-				ty = CT_SDC1; cmd = ACMD41;	/* SDv1 */
-			} else {
-				ty = CT_MMC3; cmd = CMD1;	/* MMCv3 */
-			}
-
-			for (tmr = 1000; tmr; tmr--) {			/* Wait for leaving idle state */
-				BYTE response = send_cmd(cmd, 0);
+	if (send_cmd(CMD8, 0x1AA) == 1) {	/* SDv2? */
+		rcvr_mmc(buf, 4);							/* Get trailing return value of R7 resp */
+		if (buf[2] == 0x01 && buf[3] == 0xAA) {		/* The card can work at vdd range of 2.7-3.6V */
+			for (tmr = 1000; tmr; tmr--) {			/* Wait for leaving idle state (ACMD41 with HCS bit) */
+				BYTE response = send_cmd(ACMD41, 1UL << 30);
 				if (response == 0) break;
 				else if (response == 0xFF) tmr = tmr > 100 ? tmr-100 : 1;
 				Delay_Ms(1);
 			}
-			if (!tmr || send_cmd(CMD16, 512) != 0)	/* Set R/W block length to 512 */
-				ty = 0;
+			if (tmr && send_cmd(CMD58, 0) == 0) {	/* Check CCS bit in the OCR */
+				rcvr_mmc(buf, 4);
+				ty = (buf[0] & 0x40) ? CT_SDC2 | CT_BLOCK : CT_SDC2;	/* SDv2+ */
+			}
 		}
+	} else {							/* SDv1 or MMCv3 */
+		if (send_cmd(ACMD41, 0) <= 1) 	{
+			ty = CT_SDC1; cmd = ACMD41;	/* SDv1 */
+		} else {
+			ty = CT_MMC3; cmd = CMD1;	/* MMCv3 */
+		}
+
+		for (tmr = 1000; tmr; tmr--) {			/* Wait for leaving idle state */
+			BYTE response = send_cmd(cmd, 0);
+			if (response == 0) break;
+			else if (response == 0xFF) tmr = tmr > 100 ? tmr-100 : 1;
+			Delay_Ms(1);
+		}
+		if (!tmr || send_cmd(CMD16, 512) != 0)	/* Set R/W block length to 512 */
+			ty = 0;
 	}
+
+	/* Enable CRC */
+	if(send_cmd(CMD59, 1) > 1) {
+		ty = 0;  /* Report any failure of enabling CRC as card uninitialized */
+	}
+
 	CardType = ty;
 	s = ty ? 0 : STA_NOINIT;
 	Stat = s;

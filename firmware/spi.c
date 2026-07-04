@@ -59,7 +59,33 @@ void spi_init(void) {
 					| SPI_Direction_2Lines_FullDuplex // Use both MOSI and MISO
 					| SPI_CTLR1_SPE; // SPI begin!
 
-	SPI1->CTLR2 |= SPI_CTLR2_TXDMAEN;
+	// Enable DMA (other component may also enable DMA on their own. No harm to enable it multiple times.)
+	RCC->HBPCENR |= RCC_DMA1EN;
+
+	// Configure DMA for SPI TX
+	DMA1_Channel3->PADDR = (uint32_t)(&SPI1->DATAR); // Peripheral address register
+
+	DMA1_Channel3->CFGR =
+		// (Not specifying DMA_CFGR1_PL) Set the priority to "Low"
+		// (Not specifying DMA_CFGR1_PSIZE) 8bit data for peripheral
+		// (Not specifying DMA_CFGR1_MSIZE) 8bit data for memory
+		DMA_CFGR1_MINC | // Incrememt memory address
+		DMA_CFGR1_DIR | // Read from memory, write to peripheral
+		DMA_CFGR1_TCIE; // Enable transfer-complete interrupt
+
+	// Configure interrupt controller
+	DMA1->INTFCR |= DMA_CTCIF3; // Clear the transfer-complete interrupt flag for SPI TX, just in case.
+	PFIC->IPRIOR[DMA1_Channel3_IRQn] = 0x80; // The priority is 0x80 (the highest but that it can be preempted)
+
+	// Configure DMA for SPI RX
+	DMA1_Channel2->PADDR = (uint32_t)(&SPI1->DATAR); // Peripheral address register
+	DMA1_Channel2->CFGR =
+		(DMA_CFGR1_PL_1|DMA_CFGR1_PL_0) | // Set the priority to "Very High"
+		// (Not specifying DMA_CFGR1_PSIZE) 8bit data for peripheral
+		// (Not specifying DMA_CFGR1_MSIZE) 8bit data for memory
+		DMA_CFGR1_MINC; // Incrememt memory address
+		// (Not spedifying DMA_CFGR1_DIR) Read from peripheral, write to memory
+
 
 	// Card CS pin is P0
 	// SPI pins are PC5 SCK, PC6 MOSI, and PC7 MISO
@@ -79,6 +105,12 @@ void spi_send_byte(uint8_t data) {
 }
 
 void spi_set_mode(enum spi_mode mode) {
+	// Always wait until LCD transfer completion
+	// even if we're switching to SPI_MODE_LCD.
+	// That's because a switch from SPI_MODE_LCD to SPI_MODE_LCD
+	// would still cause disruption to the SPI bus
+	while(lcd_is_transfer_in_progress()){}
+
 	switch(mode) {
 		case SPI_MODE_LCD:
 			lcd_set_backlight_suppression(false);
@@ -90,11 +122,20 @@ void spi_set_mode(enum spi_mode mode) {
 			// Setting the divider to 4. That'd be 48Mhz/4 = 12Mhz.
 			SPI1->CTLR1 &= ~SPI_CTLR1_BR;
 			SPI1->CTLR1 |= SPI_CTLR1_BR_0;
+
+			// PFIC: Enable interrupt for DMA1_Channel3_IRQn (SPI TX, used by LCD)
+			DMA1->INTFCR |= DMA_CTCIF3; // Clear the transfer-complete interrupt flag so that the interrupt handler won't get misfired right away
+			DMA1_Channel3->CFGR |= DMA_CFGR1_TCIE;
+			PFIC->IENR[DMA1_Channel3_IRQn/32] |= (1<<(DMA1_Channel3_IRQn%32));
 		break;
 		case SPI_MODE_MEMORY_CARD:
 		case SPI_MODE_MEMORY_CARD_SLOW:
 			lcd_set_backlight_suppression(true);
 			SPI1->DATAR; // Clear the RX byte
+
+			// PFIC: Disable interrupt for DMA1_Channel3_IRQn (SPI TX, used by LCD)
+			PFIC->IRER[DMA1_Channel3_IRQn/32] |= (1<<(DMA1_Channel3_IRQn%32));
+			DMA1_Channel3->CFGR &= ~DMA_CFGR1_TCIE;
 
 			// Switch to SPI mode 0 for memory card
 			SPI1->CTLR1 &= ~(SPI_CPOL_High | SPI_CPHA_2Edge);
