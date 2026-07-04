@@ -43,8 +43,21 @@ void flash_lock(void) {
 	FLASH->CTLR |= FLASH_CTLR_LOCK|FLASH_CTLR_FLOCK;
 }
 
+void flash_erase_1024(uint32_t offset) {
+	assert(offset%FLASH_SECTOR_SIZE == 0 && offset >= FLASH_USER_START && offset <= FLASH_USER_END-FLASH_SECTOR_SIZE);
+
+	// Perform standard erase
+	while(FLASH->STATR & FLASH_STATR_BSY){}
+	FLASH->CTLR |= FLASH_CTLR_PER;
+	FLASH->ADDR = offset;
+	FLASH->CTLR |= FLASH_CTLR_STRT;
+	while(!(FLASH->STATR & FLASH_STATR_EOP)){}
+	FLASH->STATR |= FLASH_STATR_EOP; // Clear EOP
+	FLASH->CTLR &= ~FLASH_CTLR_PER;
+}
+
 void flash_erase_256(uint32_t offset) {
-	assert(offset%FLASH_PAGE_SIZE == 0 && offset >= FLASH_CONFIG_START && offset < FLASH_CONFIG_END);
+	assert(offset%FLASH_PAGE_SIZE == 0 && offset >= FLASH_USER_START && offset <= FLASH_USER_END-FLASH_PAGE_SIZE);
 
 	// Perform fast erase
 	while(FLASH->STATR & FLASH_STATR_BSY){}
@@ -55,9 +68,9 @@ void flash_erase_256(uint32_t offset) {
 	FLASH->STATR |= FLASH_STATR_EOP; // Clear EOP
 	FLASH->CTLR &= ~FLASH_CTLR_PAGE_FTER;
 }
-#include <stdio.h>
+
 void flash_write_256(uint32_t offset, const void *data) {
-	assert(offset%FLASH_PAGE_SIZE == 0 && offset >= FLASH_CONFIG_START && offset < FLASH_CONFIG_END);
+	assert(offset%FLASH_PAGE_SIZE == 0 && offset >= FLASH_USER_START && offset <= FLASH_USER_END-FLASH_PAGE_SIZE);
 
 	// Perform fast programming
 	while(FLASH->STATR & FLASH_STATR_BSY){}
@@ -78,7 +91,7 @@ void flash_write_256(uint32_t offset, const void *data) {
 }
 
 void flash_write_4x64(uint32_t offset, const uint32_t data) {
-	assert(offset%FLASH_PAGE_SIZE == 0 && offset >= FLASH_CONFIG_START && offset < FLASH_CONFIG_END);
+	assert(offset%FLASH_PAGE_SIZE == 0 && offset >= FLASH_USER_START && offset <= FLASH_USER_END-FLASH_PAGE_SIZE);
 
 	// Perform fast programming
 	while(FLASH->STATR & FLASH_STATR_BSY){}

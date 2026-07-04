@@ -31,9 +31,12 @@
 // multiple variables sharing the same memory space.
 // The reason I'm not using union is that, a part of the chip8_machine
 // is not available for memory space sharing, which's chip8_machine.periph.display
-// I don't wanna take the display out of the chip8_machine.
-// Therefore, the pointer bulkmem would be pointing at chip8_machine.mem, which's 4K in size,
-// which's available
+// It'd be pretty awkward to make a union for chip8_machine.mem and the struct below because
+// I'd like to have structure of chip8_machine dedicated for chip8-related stuff.
+// Therefore, I'm creating a pointer struct shared_buffer *bulkmem, which would point
+// to chip8_machine.mem. The chip8_machine.mem is 4k in size.
+// Never access the variables in bulkmem while the chip8 emulator is running.
+// After running the chip8 emulator, all content in bulkmem would be invalidated.
 
 #include "chip8.h"
 #include <stdint.h>
@@ -43,8 +46,7 @@
 #define MENU_PAGE_SIZE (10)
 #define READDIR_CACHE_SIZE (200)
 struct shared_buffer {
-	struct chip8_config chip8_cfg;
-	char file_buffer[FILE_BUFFER_SIZE];
+	uint8_t file_buffer[FILE_BUFFER_SIZE];
 	char menu_file_list[MENU_PAGE_SIZE][14];
 	size_t readdir_cache_count;
 	size_t readdir_max_count; // SIZE_MAX if undetermined

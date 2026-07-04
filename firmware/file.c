@@ -27,7 +27,9 @@
 #include "chip8.h"
 #include "bulkmem.h"
 #include "adc.h"
+#include "crc.h"
 #include "file.h"
+#include "flash.h"
 #include "lcd.h"
 #include "spi.h"
 #include "util.h"
@@ -242,9 +244,9 @@ static bool file_parse_input_button(uint16_t *output_value, char c) {
 	return true;
 }
 
-static bool file_parse_ini(struct ini_parser *parser, const char *buffer, size_t length) {
+static bool file_parse_ini(struct ini_parser *parser, const uint8_t *buffer, size_t length) {
 	for(size_t i=0; i<length; i++) {
-		char c = buffer[i];
+		uint8_t c = buffer[i];
 		if(c == '\r' || c == '\n') {
 			parser->state = PARSING_KEY;
 			memset(parser->parsing_key, '\0', sizeof(parser->parsing_key));
@@ -357,6 +359,20 @@ static bool file_parse_ini(struct ini_parser *parser, const char *buffer, size_t
 	return true;
 }
 
+uint8_t file_load_storage_flag_inner(uint8_t *storage_flags, size_t flag_size) {
+	// Fallback value in case the flags failed to get loaded
+	memset(storage_flags, 0, flag_size);
+
+	FIL fil;
+	UINT bytesread;
+	uint8_t ret = f_open(&fil, STORAGE_FLAG_FILE, FA_READ);
+	if(ret == FR_OK) {
+		ret = f_read(&fil, storage_flags, flag_size, &bytesread);
+		f_close(&fil);
+	}
+	return ret;
+}
+
 uint8_t file_load_config(const char *path, struct chip8_config *chip8_cfg) {
 	uint8_t ret = file_card_mode_enter();
 	if(ret != FR_OK) {
@@ -365,7 +381,7 @@ uint8_t file_load_config(const char *path, struct chip8_config *chip8_cfg) {
 
 	FIL fil;
 	UINT bytesread;
-	char *buffer = (char*)bulkmem->file_buffer;
+	uint8_t *buffer = bulkmem->file_buffer;
 
 	struct ini_parser ini_parser;
 	memset(&ini_parser, 0, sizeof(ini_parser));
@@ -405,14 +421,21 @@ uint8_t file_load_config(const char *path, struct chip8_config *chip8_cfg) {
 
 	// Attempt to load the storage flag
 	if(ret == FR_OK) {
-		// Let's set the default storage flag state to zero by default
-		// Then attempt to read the storage flag file, which'd fail siltently upon failure
-		memset(chip8_cfg->storage_flags, 0, sizeof(chip8_cfg->storage_flags));
-		if(f_open(&fil, STORAGE_FLAG_FILE, FA_READ) == FR_OK) {
-			f_read(&fil, chip8_cfg->storage_flags, sizeof(chip8_cfg->storage_flags), &bytesread);
-			f_close(&fil);
-		}
+		// Attempt to read the storage flag file, which'd fail silently upon error/file not found
+		file_load_storage_flag_inner(chip8_cfg->storage_flags, sizeof(chip8_cfg->storage_flags));
 	}
+
+	file_card_mode_exit();
+	return ret;
+}
+
+uint8_t file_load_storage_flag(uint8_t *storage_flags, size_t flag_size) {
+	uint8_t ret = file_card_mode_enter();
+	if(ret != FR_OK) {
+		return ret;
+	}
+
+	ret = file_load_storage_flag_inner(storage_flags, flag_size);
 
 	file_card_mode_exit();
 	return ret;
@@ -461,38 +484,38 @@ uint8_t file_save_config(const char *path, const struct chip8_config *chip8_cfg)
 			assert(sizeof(bulkmem->file_buffer) >= 512);
 			size_t index = 0;
 			if(chip8_cfg->quirks != CHIP8_CFG_DEFAULT.quirks) {
-				index += sprintf(&bulkmem->file_buffer[index], "quirks = %08lX\n", chip8_cfg->quirks);
+				index += sprintf((char*)&bulkmem->file_buffer[index], "quirks = %08lX\n", chip8_cfg->quirks);
 			}
 			if(chip8_cfg->speed != CHIP8_CFG_DEFAULT.speed) {
-				index += sprintf(&bulkmem->file_buffer[index], "speed = %u\n", chip8_cfg->speed);
+				index += sprintf((char*)&bulkmem->file_buffer[index], "speed = %u\n", chip8_cfg->speed);
 			}
 			if(memcmp(chip8_cfg->audio, CHIP8_CFG_DEFAULT.audio, sizeof(chip8_cfg->audio))) {
-				index += sprintf(&bulkmem->file_buffer[index], "audio = ");
-				index += file_print_hex_buffer(&bulkmem->file_buffer[index], chip8_cfg->audio, sizeof(chip8_cfg->audio));
-				index += sprintf(&bulkmem->file_buffer[index], "\n");
+				index += sprintf((char*)&bulkmem->file_buffer[index], "audio = ");
+				index += file_print_hex_buffer((char*)&bulkmem->file_buffer[index], chip8_cfg->audio, sizeof(chip8_cfg->audio));
+				index += sprintf((char*)&bulkmem->file_buffer[index], "\n");
 			}
 			if(chip8_cfg->input_layout != CHIP8_CFG_DEFAULT.input_layout) {
-				index += sprintf(&bulkmem->file_buffer[index], "layout = %u\n", chip8_cfg->input_layout);
+				index += sprintf((char*)&bulkmem->file_buffer[index], "layout = %u\n", chip8_cfg->input_layout);
 			}
 			if(chip8_cfg->input_navigation != CHIP8_CFG_DEFAULT.input_navigation) {
-				index += sprintf(&bulkmem->file_buffer[index], "navigation = ");
-				index += util_print_button_buffer(&bulkmem->file_buffer[index], chip8_cfg->input_navigation);
-				index += sprintf(&bulkmem->file_buffer[index], "\n");
+				index += sprintf((char*)&bulkmem->file_buffer[index], "navigation = ");
+				index += util_print_button_buffer((char*)&bulkmem->file_buffer[index], chip8_cfg->input_navigation);
+				index += sprintf((char*)&bulkmem->file_buffer[index], "\n");
 			}
 			if(chip8_cfg->input_action != CHIP8_CFG_DEFAULT.input_action) {
-				index += sprintf(&bulkmem->file_buffer[index], "action = ");
-				index += util_print_button_buffer(&bulkmem->file_buffer[index], chip8_cfg->input_action);
-				index += sprintf(&bulkmem->file_buffer[index], "\n");
+				index += sprintf((char*)&bulkmem->file_buffer[index], "action = ");
+				index += util_print_button_buffer((char*)&bulkmem->file_buffer[index], chip8_cfg->input_action);
+				index += sprintf((char*)&bulkmem->file_buffer[index], "\n");
 			}
 			if(chip8_cfg->input_replay != CHIP8_CFG_DEFAULT.input_replay) {
-				index += sprintf(&bulkmem->file_buffer[index], "replay = ");
-				index += util_print_button_buffer(&bulkmem->file_buffer[index], chip8_cfg->input_replay);
-				index += sprintf(&bulkmem->file_buffer[index], "\n");
+				index += sprintf((char*)&bulkmem->file_buffer[index], "replay = ");
+				index += util_print_button_buffer((char*)&bulkmem->file_buffer[index], chip8_cfg->input_replay);
+				index += sprintf((char*)&bulkmem->file_buffer[index], "\n");
 			}
 			if(memcmp(chip8_cfg->font, CHIP8_CFG_DEFAULT.font, sizeof(chip8_cfg->font))) {
-				index += sprintf(&bulkmem->file_buffer[index], "font = ");
-				index += file_print_hex_buffer(&bulkmem->file_buffer[index], chip8_cfg->font, sizeof(chip8_cfg->font));
-				index += sprintf(&bulkmem->file_buffer[index], "\n");
+				index += sprintf((char*)&bulkmem->file_buffer[index], "font = ");
+				index += file_print_hex_buffer((char*)&bulkmem->file_buffer[index], chip8_cfg->font, sizeof(chip8_cfg->font));
+				index += sprintf((char*)&bulkmem->file_buffer[index], "\n");
 			}
 			UINT byteswritten;
 			ret = f_write(&fil, bulkmem->file_buffer, index, &byteswritten);
@@ -503,9 +526,9 @@ uint8_t file_save_config(const char *path, const struct chip8_config *chip8_cfg)
 			// Need to split the f_write() into two blocks to fit the string into the 512 bytes buffer
 			index = 0;
 			if(memcmp(chip8_cfg->font_highres, CHIP8_CFG_DEFAULT.font_highres, sizeof(chip8_cfg->font_highres))) {
-				index += sprintf(&bulkmem->file_buffer[index], "font-large = ");
-				index += file_print_hex_buffer(&bulkmem->file_buffer[index], chip8_cfg->font_highres, sizeof(chip8_cfg->font_highres));
-				index += sprintf(&bulkmem->file_buffer[index], "\n");
+				index += sprintf((char*)&bulkmem->file_buffer[index], "font-large = ");
+				index += file_print_hex_buffer((char*)&bulkmem->file_buffer[index], chip8_cfg->font_highres, sizeof(chip8_cfg->font_highres));
+				index += sprintf((char*)&bulkmem->file_buffer[index], "\n");
 			}
 			ret = f_write(&fil, bulkmem->file_buffer, index, &byteswritten);
 			if(byteswritten != index) { ret = FR_VOLUME_FULL; }
@@ -665,7 +688,7 @@ uint8_t file_verify_firmware_update(void) {
 	uint8_t *flash_offset = (uint8_t*)FLASH_START_OFFSET;
 	ret = f_open(&fil, FLASH_FILE, FA_READ);
 	if(ret == FR_OK) {
-		char *buffer = (char*)bulkmem->file_buffer;
+		uint8_t *buffer = bulkmem->file_buffer;
 		while(flash_offset < (uint8_t*)FLASH_END_OFFSET) {
 			ret = f_read(&fil, buffer, FILE_BUFFER_SIZE, &bytesread);
 			if(ret != FR_OK) { // Error condition
@@ -690,6 +713,92 @@ uint8_t file_verify_firmware_update(void) {
 			ret = FR_OK; // The backup file might not exist, which's ok
 		}
 		ret = f_rename(FLASH_FILE, FLASH_FILE_OLD);
+	}
+
+	file_card_mode_exit();
+	return ret;
+}
+
+static uint8_t file_program_bootrom_inner(uint32_t flash_offset, const uint8_t *buffer, bool dry_run) {
+	if(dry_run) {
+		// Verify the buffer without flashing it
+		if(memcmp((uint32_t*)flash_offset, buffer, FILE_BUFFER_SIZE)) {
+			return FR_BOOTROM_VERIFICATION_ERROR;
+		}
+	} else {
+		static_assert(FLASH_PAGE_SIZE == 256);
+		static_assert(FILE_BUFFER_SIZE == 512);
+		flash_write_256(flash_offset, buffer);
+		flash_write_256(flash_offset+FLASH_PAGE_SIZE, &buffer[FLASH_PAGE_SIZE]);
+	}
+	return FR_OK;
+}
+
+uint8_t file_program_bootrom(const char *path, const struct chip8_config *chip8_cfg, bool dry_run) {
+	uint8_t ret = file_card_mode_enter();
+	if(ret != FR_OK) {
+		return ret;
+	}
+
+	asm volatile("" ::: "memory"); // Prevents compiler from cutting coner and skip accessing the bootrom's FLASH content
+	uint32_t crc = 0xFFFFFFFF;
+	FIL fil;
+	UINT bytesread;
+	ret = f_open(&fil, path, FA_READ);
+	if(ret == FR_OK) {
+		uint8_t *buffer = (uint8_t*)bulkmem->file_buffer;
+		// Flash the game ROM into the FLASH's bootrom section
+		uint32_t flash_offset = FLASH_BOOTROM_CH8_START;
+		bool eof = false;
+		assert(FLASH_BOOTROM_CH8_START%FILE_BUFFER_SIZE == 0 && FLASH_BOOTROM_CH8_END%FILE_BUFFER_SIZE == 0);
+		while(flash_offset < FLASH_BOOTROM_CH8_END) {
+			// Always prefill ROM content with zeros just like chip8_init() inside file_load_rom()
+			// It's make sure that the CHIP-8 emulator of boot ROM loaded from flash would have
+			// the same behavior as the ROM loaded from the card
+			memset(buffer, 0, FILE_BUFFER_SIZE);
+			if(!eof) {
+				ret = f_read(&fil, buffer, FILE_BUFFER_SIZE, &bytesread);
+				if(ret != FR_OK) { // Error condition
+					break;
+				}
+			}
+
+			// Perform flashing (or verification if dry_run)
+			ret = file_program_bootrom_inner(flash_offset, buffer, dry_run);
+			if(ret != FR_OK) {
+				// For dry_run, FR_BOOTROM_VERIFICATION_ERROR had occurred
+				// We've confirmed that the bootrom content's different from
+				// the one we intend to write. We can stop further verifying.
+				break;
+			}
+
+			crc = crc32_compute(CRC32_TABLE, crc, buffer, FILE_BUFFER_SIZE);
+			flash_offset += FILE_BUFFER_SIZE;
+			if(bytesread < FILE_BUFFER_SIZE) { // EOF condition
+				eof = true;
+			}
+		}
+		f_close(&fil);
+
+		// Flash the config into the FLASH's bootrom section
+		if(ret == FR_OK) {
+			// Make sure that FILE_BUFFER_SIZE is 512
+			static_assert(FILE_BUFFER_SIZE == FLASH_BOOTROM_CRC_END-FLASH_BOOTROM_CFG_START);
+			// Ensure that the BOOTROM layout is as expected. First comes the CFG, then comes the 4-byte CRC.
+			static_assert(FLASH_BOOTROM_CFG_END == FLASH_BOOTROM_CRC_START);
+			static_assert(FLASH_BOOTROM_CRC_END-FLASH_BOOTROM_CRC_START == 4);
+			// Make sure that the config can fit into the BOOTROM_CFG section
+			static_assert(sizeof(*chip8_cfg) < FLASH_BOOTROM_CFG_END-FLASH_BOOTROM_CFG_START);
+
+			// Derive the 512 byte buffer that contains the game config and the CRC (the CRC is for the game rom + game config)
+			memset(buffer, 0xFF, FILE_BUFFER_SIZE);
+			memcpy(buffer, chip8_cfg, sizeof(*chip8_cfg));
+			crc = crc32_compute(CRC32_TABLE, crc, buffer, FLASH_BOOTROM_CFG_END-FLASH_BOOTROM_CFG_START);
+			memcpy(&buffer[FLASH_BOOTROM_CFG_END-FLASH_BOOTROM_CFG_START], &crc, sizeof(uint32_t));
+
+			// Perform flashing (or verification if dry_run)
+			ret = file_program_bootrom_inner(flash_offset, buffer, dry_run);
+		}
 	}
 
 	file_card_mode_exit();

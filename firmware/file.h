@@ -34,7 +34,9 @@
 #define FR_VOLUME_FULL (91) // f_write() had indicated that the volume is full
 #define FR_PATH_LENGTH_ERROR (92) // Directory recursion limit reached
 #define FR_FIRMWARE_VERIFICATION_ERROR (93) // The firwmare verification failed
-#define FR_LOW_BATTERY (94) // Low battery (<3000mV). The card is put into read-only mode.
+#define FR_BOOTROM_VERIFICATION_ERROR (94) // The bootrom verification had failed
+#define FR_LOW_BATTERY (95) // Low battery (<3000mV). The card is put into read-only mode.
+
 
 #define CHIP8_QUIRK_PLATFORM_VIP (CHIP8_QUIRK_VBLANK|CHIP8_QUIRK_LOGIC) // 0x00000060
 #define CHIP8_QUIRK_PLATFORM_SCHIP (CHIP8_QUIRK_SHIFT|CHIP8_QUIRK_MEMORY_LEAVE_I_UNCHANGED|CHIP8_QUIRK_JUMP|CHIP8_QUIRK_HIRES_COLLISION)  // 0x00000413
@@ -49,6 +51,8 @@ void file_loop(void); // Process card insertion/removal events
 uint8_t file_load_config(const char *path, struct chip8_config *chip8_cfg);
 uint8_t file_save_config(const char *path, const struct chip8_config *chip8_cfg);
 uint8_t file_load_rom(const char *path, const struct chip8_config *chip8_cfg, struct chip8_machine *chip8_machine);
+uint8_t file_load_storage_flag(uint8_t *storage_flags, size_t flag_size);
 uint8_t file_save_storage_flag(const uint8_t *storage_flags, size_t flag_size);
 uint8_t file_readdir(const char *path, bool changed, size_t offset, char (*filelist)[14], size_t *count);
 uint8_t file_verify_firmware_update(void); // Verify firmware. If OK, automatically delete the firmware file
+uint8_t file_program_bootrom(const char *path, const struct chip8_config *chip8_cfg, bool dry_run);
