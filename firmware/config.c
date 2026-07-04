@@ -54,7 +54,7 @@ static uint32_t config_to_uint32(const void *config) {
 }
 
 void config_load(struct global_config *config) {
-	assert(sizeof(struct global_config) == sizeof(uint32_t));
+	static_assert(sizeof(struct global_config) == sizeof(uint32_t));
 
 	// Look for a proper config backward from the end of the storage area to its beginning
 	const size_t IDENTICAL_REQUIREMENT = 4;

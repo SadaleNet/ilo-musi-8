@@ -1144,7 +1144,7 @@ int main() {
 
 	watchdog_feed();
 
-	assert(sizeof(struct shared_buffer) <= sizeof(chip8.mem));
+	static_assert(sizeof(struct shared_buffer) <= sizeof(chip8.mem));
 	bulkmem = (struct shared_buffer*)chip8.mem;
 
 	// Shared by all screens except for SCREEN_GAMEPLAY

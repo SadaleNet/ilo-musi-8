@@ -481,7 +481,7 @@ uint8_t file_save_config(const char *path, const struct chip8_config *chip8_cfg)
 		do {
 			// Assumption 1: sprintf() wouldn't return negative value because there shouldn't be any encoding error
 			// Assumption 2: The buffer always has enough space for storing the entire string
-			assert(sizeof(bulkmem->file_buffer) >= 512);
+			static_assert(sizeof(bulkmem->file_buffer) >= 512);
 			size_t index = 0;
 			if(chip8_cfg->quirks != CHIP8_CFG_DEFAULT.quirks) {
 				index += sprintf((char*)&bulkmem->file_buffer[index], "quirks = %08lX\n", chip8_cfg->quirks);
@@ -629,8 +629,8 @@ static int file_sort_entry(const void *a, const void *b) {
 	char b2[16];
 
 	// Ensure that there's enough space for inserting the prefix letter
-	assert(sizeof(*bulkmem->readdir_cache)+1 < sizeof(a2));
-	assert(sizeof(*bulkmem->readdir_cache)+1 < sizeof(b2));
+	static_assert(sizeof(*bulkmem->readdir_cache)+1 < sizeof(a2));
+	static_assert(sizeof(*bulkmem->readdir_cache)+1 < sizeof(b2));
 
 	// Sorting: directories come first, then it comes the file.
 	// The files got sorted alphabetically
@@ -750,7 +750,7 @@ uint8_t file_program_bootrom(const char *path, const struct chip8_config *chip8_
 		// Flash the game ROM into the FLASH's bootrom section
 		uint32_t flash_offset = FLASH_BOOTROM_CH8_START;
 		bool eof = false;
-		assert(FLASH_BOOTROM_CH8_START%FILE_BUFFER_SIZE == 0 && FLASH_BOOTROM_CH8_END%FILE_BUFFER_SIZE == 0);
+		static_assert(FLASH_BOOTROM_CH8_START%FILE_BUFFER_SIZE == 0 && FLASH_BOOTROM_CH8_END%FILE_BUFFER_SIZE == 0);
 		while(flash_offset < FLASH_BOOTROM_CH8_END) {
 			// Always prefill ROM content with zeros just like chip8_init() inside file_load_rom()
 			// It's make sure that the CHIP-8 emulator of boot ROM loaded from flash would have

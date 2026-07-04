@@ -82,7 +82,7 @@ void chip8_step(struct chip8_machine *machine) {
 					if(NEED_DOUBLE_SCROLL()) {
 						shift *= 2;
 					}
-					assert(CHIP8_DISPLAY_HEIGHT == 64);
+					static_assert(CHIP8_DISPLAY_HEIGHT == 64);
 					for(size_t x=0; x<CHIP8_DISPLAY_WIDTH; x++) {
 						*((uint64_t*)&periph->display[x*CHIP8_DISPLAY_HEIGHT/8]) = *((uint64_t*)&periph->display[x*CHIP8_DISPLAY_HEIGHT/8]) << shift;
 					}
@@ -94,7 +94,7 @@ void chip8_step(struct chip8_machine *machine) {
 					if(NEED_DOUBLE_SCROLL()) {
 						shift *= 2;
 					}
-					assert(CHIP8_DISPLAY_HEIGHT == 64);
+					static_assert(CHIP8_DISPLAY_HEIGHT == 64);
 					for(size_t x=0; x<CHIP8_DISPLAY_WIDTH; x++) {
 						*((uint64_t*)&periph->display[x*CHIP8_DISPLAY_HEIGHT/8]) = *((uint64_t*)&periph->display[x*CHIP8_DISPLAY_HEIGHT/8]) >> shift;
 					}
