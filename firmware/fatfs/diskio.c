@@ -39,6 +39,8 @@
 #include "ch32fun.h"
 #include <assert.h>
 
+#define MS2TICK(X) (FUNCONF_SYSTEM_CORE_CLOCK/1000 *X)
+
 static const uint8_t DUMMY_TX_BUFFER[512] = {
 	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
@@ -269,16 +271,15 @@ static
 int wait_ready (void)	/* 1:OK, 0:Timeout */
 {
 	BYTE d;
-	UINT tmr;
+	uint32_t tick = SysTick->CNT;
 
-
-	for (tmr = 500; tmr; tmr--) {	/* Wait for ready in timeout of 500ms */
+	while (SysTick->CNT-tick < MS2TICK(500)) {	/* Wait for ready in timeout of 500ms */
 		rcvr_mmc(&d, 1);
-		if (d == 0xFF) break;
-		Delay_Ms(1);
+		if (d == 0xFF) return 1;
+		Delay_Us(10);
 	}
 
-	return tmr ? 1 : 0;
+	return 0;
 }
 
 
@@ -328,12 +329,11 @@ int rcvr_datablock (	/* 1:OK, 0:Failed */
 )
 {
 	BYTE d[2];
-	UINT tmr;
+	uint32_t tick = SysTick->CNT;
 
-	for (tmr = 100; tmr; tmr--) {					/* Wait for data packet in timeout of 100ms */
+	while (SysTick->CNT-tick < MS2TICK(100)) {		/* Wait for data packet in timeout of 100ms */
 		rcvr_mmc(d, 1);
 		if (d[0] != 0xFF) break;
-		Delay_Ms(1);
 	}
 	if (d[0] != 0xFE) return 0;						/* If not valid data token, return with error */
 
@@ -457,7 +457,8 @@ DSTATUS disk_initialize (
 )
 {
 	BYTE n, ty, cmd, buf[4];
-	UINT tmr;
+	BYTE response;
+	uint32_t tick;
 	DSTATUS s;
 
 
@@ -470,24 +471,25 @@ DSTATUS disk_initialize (
 
 	ty = 0;
 
-	/* Retry for up to 100 times. See https://electronics.stackexchange.com/a/238217 */
-	for (tmr = 100; tmr; tmr--) { /* Enter Idle state. */
+	/* Retry for up to 50ms. See https://electronics.stackexchange.com/a/238217 */
+	tick = SysTick->CNT;
+	while (SysTick->CNT-tick < MS2TICK(50)) { /* Enter Idle state. */
 		if (send_cmd(CMD0, 0) == 1) {
 			break;
 		}
-		Delay_Ms(1);
+		Delay_Us(10);
 	}
 
 	if (send_cmd(CMD8, 0x1AA) == 1) {	/* SDv2? */
 		rcvr_mmc(buf, 4);							/* Get trailing return value of R7 resp */
 		if (buf[2] == 0x01 && buf[3] == 0xAA) {		/* The card can work at vdd range of 2.7-3.6V */
-			for (tmr = 1000; tmr; tmr--) {			/* Wait for leaving idle state (ACMD41 with HCS bit) */
-				BYTE response = send_cmd(ACMD41, 1UL << 30);
+			tick = SysTick->CNT;
+			while (SysTick->CNT-tick < MS2TICK(1000)) {			/* Wait for leaving idle state (ACMD41 with HCS bit) */
+				response = send_cmd(ACMD41, 1UL << 30);
 				if (response == 0) break;
-				else if (response == 0xFF) tmr = tmr > 100 ? tmr-100 : 1;
-				Delay_Ms(1);
+				Delay_Us(10);
 			}
-			if (tmr && send_cmd(CMD58, 0) == 0) {	/* Check CCS bit in the OCR */
+			if (response == 0 && send_cmd(CMD58, 0) == 0) {	/* Check CCS bit in the OCR */
 				rcvr_mmc(buf, 4);
 				ty = (buf[0] & 0x40) ? CT_SDC2 | CT_BLOCK : CT_SDC2;	/* SDv2+ */
 			}
@@ -499,13 +501,14 @@ DSTATUS disk_initialize (
 			ty = CT_MMC3; cmd = CMD1;	/* MMCv3 */
 		}
 
-		for (tmr = 1000; tmr; tmr--) {			/* Wait for leaving idle state */
-			BYTE response = send_cmd(cmd, 0);
+		tick = SysTick->CNT;
+		response = 0xFF;
+		while (SysTick->CNT-tick < MS2TICK(1000)) {			/* Wait for leaving idle state */
+			response = send_cmd(cmd, 0);
 			if (response == 0) break;
-			else if (response == 0xFF) tmr = tmr > 100 ? tmr-100 : 1;
-			Delay_Ms(1);
+			Delay_Us(10);
 		}
-		if (!tmr || send_cmd(CMD16, 512) != 0)	/* Set R/W block length to 512 */
+		if (response != 0 || send_cmd(CMD16, 512) != 0)	/* Set R/W block length to 512 */
 			ty = 0;
 	}
 
