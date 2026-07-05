@@ -165,6 +165,10 @@ int menu_offset;
 uint8_t file_io_result;
 size_t menu_file_count_of_current_page;
 
+// Shortcut definitions for SCREEN_MENU and SCREEN_GAME_CONFIG
+#define MENU_OFFSET_ON_CURRENT_PAGE (menu_offset%MENU_PAGE_SIZE)
+#define MENU_SELECTED_FILENAME (menu_file_list[MENU_OFFSET_ON_CURRENT_PAGE])
+
 // For SCREEN_GAME_CONFIG
 enum game_config_selection game_config_selection;
 uint8_t game_config_index;
@@ -311,22 +315,26 @@ static void prepare_game_launch(void) {
 	game_paused = false;
 }
 
+static bool screen_menu_selected_item_is_a_file(void) {
+	return (!menu_cache_invalidated && // content of menu_file_list is valid
+			menu_file_count_of_current_page > 0 && // non-empty directory
+			strlen(MENU_SELECTED_FILENAME) > 0 && // Boundary check for the next condition
+			MENU_SELECTED_FILENAME[strlen(MENU_SELECTED_FILENAME)-1] != '/' // Not having trailing slash
+		);
+}
+
 static void screen_menu_handler(void) {
 	int menu_offset_prev = menu_offset;
 	uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
-	size_t menu_offset_on_current_page = menu_offset%MENU_PAGE_SIZE;
 
 	// Must not handle keypress if menu_cache_invalidated==true
 	// That's because the keypress handling might access menu_file_list,
 	// which's a part of bulkmem, which might have invalid content if menu_cache_invalidated==true
 	if(!menu_cache_invalidated) {
 		if((button_press & (1<<0xC))) { // The C button
-			if(menu_file_count_of_current_page > 0 && // Only usable inside non-empty directories
-			strlen(menu_file_list[menu_offset_on_current_page]) > 0 && // Boundary check for the next condition
-			menu_file_list[menu_offset_on_current_page][strlen(menu_file_list[menu_offset_on_current_page])-1] != '/'  // Only usable if the selected item isn't a directory
-			) {
+			if(screen_menu_selected_item_is_a_file()) {
 				// Load the INI file into chip8_cfg, then restore menu_current_dir's content
-				directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
+				directory_attach_filename(menu_current_dir, MENU_SELECTED_FILENAME);
 				memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "INI", 3);
 				file_io_result = file_load_config(menu_current_dir, chip8_cfg);
 				directory_remove_filename(menu_current_dir);
@@ -340,9 +348,9 @@ static void screen_menu_handler(void) {
 			menu_display_update_required = true;
 		} else if((button_press & (1<<0xF)) && menu_file_count_of_current_page > 0) { // The F button. Only usable for non-empty directories
 			// Attach the filename to the current menu_current_dir
-			directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
+			directory_attach_filename(menu_current_dir, MENU_SELECTED_FILENAME);
 
-			if(strlen(menu_file_list[menu_offset_on_current_page]) > 0 && menu_file_list[menu_offset_on_current_page][strlen(menu_file_list[menu_offset_on_current_page])-1] == '/') {
+			if(!screen_menu_selected_item_is_a_file()) { // Not a file. That gotta be a directory.
 				if(strlen(menu_current_dir) >= sizeof(menu_current_dir)-13-1) { // 13 for 8.3 filename with trailing slash, 1 for null terminator
 					// The path's too long
 					// We must reserve enough space for storing the filename next time we select a file.
@@ -440,11 +448,9 @@ static void screen_menu_handler(void) {
 		return;
 	}
 
-	menu_offset_on_current_page = menu_offset%MENU_PAGE_SIZE;
 	// Prevent selection of empty entries
-	if(menu_offset_on_current_page > menu_file_count_of_current_page-1) {
+	if(MENU_OFFSET_ON_CURRENT_PAGE > menu_file_count_of_current_page-1) {
 		menu_offset = menu_offset/MENU_PAGE_SIZE*MENU_PAGE_SIZE + menu_file_count_of_current_page-1;
-		menu_offset_on_current_page = menu_offset%MENU_PAGE_SIZE;
 	}
 
 	// Render the menu
@@ -455,15 +461,17 @@ static void screen_menu_handler(void) {
 			for(size_t i=0; i<menu_file_count_of_current_page; i++) {
 				draw_text(chip8.periph.display, menu_file_list[i], 6, 6*i);
 			}
-			draw_text(chip8.periph.display, ">", 0, 6*menu_offset_on_current_page);
+			draw_text(chip8.periph.display, ">", 0, 6*MENU_OFFSET_ON_CURRENT_PAGE);
 		} else {
 			draw_text(chip8.periph.display, "[EMPTY]", 0, 0);
 		}
 		// Draw legend
 		draw_text(chip8.periph.display, "2468", 96, 24+1);
 		draw_bitmap_h8(chip8.periph.display, ICON_NAVIGATION, ICON_NAVIGATION_LENGTH, 120, 24);
-		draw_text(chip8.periph.display, "C", 114, 32+1);
-		draw_bitmap_h8(chip8.periph.display, ICON_GAMECONF, ICON_GAMECONF_LENGTH, 120, 32);
+		if(screen_menu_selected_item_is_a_file()) {
+			draw_text(chip8.periph.display, "C", 114, 32+1);
+			draw_bitmap_h8(chip8.periph.display, ICON_GAMECONF, ICON_GAMECONF_LENGTH, 120, 32);
+		}
 		draw_text(chip8.periph.display, "D", 114, 40+1);
 		draw_bitmap_h8(chip8.periph.display, ICON_GLOBALCONF, ICON_GLOBALCONF_LENGTH, 120, 40);
 		draw_text(chip8.periph.display, "F", 114, 48+1);
@@ -477,7 +485,6 @@ static void screen_menu_handler(void) {
 
 static void screen_game_config_handler(void) {
 	uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
-	size_t menu_offset_on_current_page = menu_offset%MENU_PAGE_SIZE;
 	switch(game_config_selection) {
 		case GAME_CONFIG_MAIN:
 			if(button_press & (1<<0xA)) { // The A button
@@ -493,7 +500,7 @@ static void screen_game_config_handler(void) {
 				menu_display_update_required = true;
 				game_config_selection = GAME_CONFIG_BOOT_ROM;
 			} else if(button_press & (1<<0xF)) { // The F button
-				directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
+				directory_attach_filename(menu_current_dir, MENU_SELECTED_FILENAME);
 				memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "INI", 3);
 				file_io_result = file_save_config(menu_current_dir, chip8_cfg);
 				directory_remove_filename(menu_current_dir);
@@ -593,7 +600,7 @@ static void screen_game_config_handler(void) {
 		case GAME_CONFIG_BOOT_ROM:
 			if(button_press & (1<<0xF)) {
 				memset(chip8_cfg->storage_flags, 0, sizeof(chip8_cfg->storage_flags)); // Never save the storage flag into the bootrom
-				directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
+				directory_attach_filename(menu_current_dir, MENU_SELECTED_FILENAME);
 				file_io_result = bootrom_program(menu_current_dir, chip8_cfg);
 				directory_remove_filename(menu_current_dir);
 				if(file_io_result == FR_OK) {
