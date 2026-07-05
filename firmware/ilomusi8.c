@@ -385,7 +385,6 @@ static void screen_menu_handler(void) {
 		} else if(button_press & (1<<0x10)) { // The X button
 			// Up a directory
 			directory_up(menu_current_dir);
-			// Always reload directory so that the user would have visual feedback
 			menu_offset = 0;
 			menu_cache_invalidated = true;
 		} else {
@@ -416,8 +415,8 @@ static void screen_menu_handler(void) {
 		for(size_t i=0; i<2; i++) {
 			menu_file_count_of_current_page = MENU_PAGE_SIZE;
 			file_io_result = file_readdir(menu_current_dir, menu_cache_invalidated, menu_offset/MENU_PAGE_SIZE*MENU_PAGE_SIZE, menu_file_list, &menu_file_count_of_current_page);
-			menu_cache_invalidated = false;
 			if(file_io_result == FR_OK) {
+				menu_cache_invalidated = false;
 				if(menu_offset > 0 && menu_file_count_of_current_page == 0) {
 					// The new page's empty. It happens when we reached the end of the directory
 					// Let's select the last entry of the previous page
@@ -722,7 +721,7 @@ static void screen_global_config_handler(void) {
 			} else if(button_press & (1<<0xF)) { // The F button
 				config_save(&global_config);
 				menu_display_update_required = true;
-				screen_state = (file_io_result == FR_OK) ? SCREEN_MENU : SCREEN_ERROR; // If the user came from SCREEN_ERROR, file_io_result might not be FR_OK
+				screen_state = SCREEN_MENU;
 			} else if(button_press & (1<<0x10)) { // The X button
 				// Revert to original global config
 				memcpy(&global_config, &global_config_backup, sizeof(global_config));
@@ -730,7 +729,7 @@ static void screen_global_config_handler(void) {
 				apply_brightness();
 				apply_contrast();
 				menu_display_update_required = true;
-				screen_state = (file_io_result == FR_OK) ? SCREEN_MENU : SCREEN_ERROR; // If the user came from SCREEN_ERROR, file_io_result might not be FR_OK
+				screen_state = SCREEN_MENU;
 			}
 		break;
 		// Shared by GLOBAL_CONFIG_VOLUME, GLOBAL_CONFIG_BACKLIGHT, GLOBAL_CONFIG_CONTRAST
