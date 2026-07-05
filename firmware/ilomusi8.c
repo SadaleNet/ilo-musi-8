@@ -46,6 +46,7 @@
 #include <string.h>
 #include <assert.h>
 
+#define FIRMWARE_VERSION "v0.1"
 #define GAMEPLAY_INSTRUCTION_DURATION_MS (5000U) // Show gameplay instruction for this long
 #define GAMEPLAY_EXIT_DURATION_MS (3000U) // Tell the user to hold <X> for this long to exit the game
 #define GAMEPLAY_EXIT_BANNER_ROW_POS (3) // The row position of the EXIT banner for warning the user about the exit
@@ -842,6 +843,7 @@ static void screen_global_config_handler(void) {
 				draw_text(chip8.periph.display, "E)", 0, 36);
 				draw_text(chip8.periph.display, "F)SAVE", 0, 47);
 				draw_text(chip8.periph.display, "X)CANCEL", 0, 56);
+				draw_text(chip8.periph.display, FIRMWARE_VERSION, DISPLAY_WIDTH-strlen(FIRMWARE_VERSION)*6, 58);
 			break;
 			case GLOBAL_CONFIG_VOLUME:
 			case GLOBAL_CONFIG_BACKLIGHT:
