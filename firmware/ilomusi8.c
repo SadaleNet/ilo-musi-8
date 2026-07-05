@@ -318,85 +318,91 @@ static void screen_menu_handler(void) {
 	int menu_offset_prev = menu_offset;
 	uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
 	size_t menu_offset_on_current_page = menu_offset%MENU_PAGE_SIZE;
-	if((button_press & (1<<0xC))) { // The C button
-		if(menu_file_count_of_current_page > 0 && // Only usable inside non-empty directories
-		strlen(menu_file_list[menu_offset_on_current_page]) > 0 && // Boundary check for the next condition
-		menu_file_list[menu_offset_on_current_page][strlen(menu_file_list[menu_offset_on_current_page])-1] != '/'  // Only usable if the selected item isn't a directory
-		) {
-			// Load the INI file into chip8_cfg, then restore menu_current_dir's content
-			directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
-			memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "INI", 3);
-			file_io_result = file_load_config(menu_current_dir, chip8_cfg);
-			directory_remove_filename(menu_current_dir);
-			// Head to the game config screen
-			screen_state = (file_io_result == FR_OK) ? SCREEN_GAME_CONFIG : SCREEN_ERROR;
+
+	// Must not handle keypress if menu_cache_invalidated==true
+	// That's because the keypress handling might access menu_file_list,
+	// which's a part of bulkmem, which might have invalid content if menu_cache_invalidated==true
+	if(!menu_cache_invalidated) {
+		if((button_press & (1<<0xC))) { // The C button
+			if(menu_file_count_of_current_page > 0 && // Only usable inside non-empty directories
+			strlen(menu_file_list[menu_offset_on_current_page]) > 0 && // Boundary check for the next condition
+			menu_file_list[menu_offset_on_current_page][strlen(menu_file_list[menu_offset_on_current_page])-1] != '/'  // Only usable if the selected item isn't a directory
+			) {
+				// Load the INI file into chip8_cfg, then restore menu_current_dir's content
+				directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
+				memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "INI", 3);
+				file_io_result = file_load_config(menu_current_dir, chip8_cfg);
+				directory_remove_filename(menu_current_dir);
+				// Head to the game config screen
+				screen_state = (file_io_result == FR_OK) ? SCREEN_GAME_CONFIG : SCREEN_ERROR;
+				menu_display_update_required = true;
+			}
+		} else if((button_press & (1<<0xD))) { // The D button
+			memcpy(&global_config_backup, &global_config, sizeof(global_config_backup));
+			screen_state = SCREEN_GLOBAL_CONFIG;
 			menu_display_update_required = true;
-		}
-	} else if((button_press & (1<<0xD))) { // The D button
-		memcpy(&global_config_backup, &global_config, sizeof(global_config_backup));
-		screen_state = SCREEN_GLOBAL_CONFIG;
-		menu_display_update_required = true;
-	} else if((button_press & (1<<0xF)) && menu_file_count_of_current_page > 0) { // The F button. Only usable for non-empty directories
-		// Attach the filename to the current menu_current_dir
-		directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
+		} else if((button_press & (1<<0xF)) && menu_file_count_of_current_page > 0) { // The F button. Only usable for non-empty directories
+			// Attach the filename to the current menu_current_dir
+			directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
 
-		if(strlen(menu_file_list[menu_offset_on_current_page]) > 0 && menu_file_list[menu_offset_on_current_page][strlen(menu_file_list[menu_offset_on_current_page])-1] == '/') {
-			if(strlen(menu_current_dir) >= sizeof(menu_current_dir)-13-1) { // 13 for 8.3 filename with trailing slash, 1 for null terminator
-				// The path's too long
-				// We must reserve enough space for storing the filename next time we select a file.
-				// Since the path's too long, we need to get out of here and show error to the end-user
-				directory_up(menu_current_dir);
-				file_io_result = FR_PATH_LENGTH_ERROR;
-				// Here, now that I just need to wait for the (file_io_result != FR_OK) handling way below
-			} else {
-				// After entering the directory, reset the cursor to the beginning
-				menu_offset = 0;
-				menu_cache_invalidated = true;
-				menu_dir_reload_required = true;
-			}
-		} else {
-			// Load INI config
-			memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "INI", 3); // replace file extension to .INI
-			file_io_result = file_load_config(menu_current_dir, chip8_cfg);
-
-			if(file_io_result == FR_OK) {
-				// Config file loaded successfully. Let's try loading the game!
-				memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "CH8", 3); // resume file extension of .CH8
-				file_io_result = file_load_rom(menu_current_dir, chip8_cfg, &chip8);
-				menu_cache_invalidated = true;
-				if(file_io_result == FR_OK) {
-					prepare_game_launch();
-					if(chip8_cfg->input_navigation || chip8_cfg->input_action || chip8_cfg->input_layout) {
-						// If specified in the config INI file, show input buttons and the layout
-						menu_display_update_required = true;
-						screen_state = SCREEN_PRE_GAMEPLAY;
-					} else {
-						// If the input buttons haven't been specified in the config file, just run the game!
-						get_rid_of_all_button_events();
-						screen_state = SCREEN_GAMEPLAY;
-					}
+			if(strlen(menu_file_list[menu_offset_on_current_page]) > 0 && menu_file_list[menu_offset_on_current_page][strlen(menu_file_list[menu_offset_on_current_page])-1] == '/') {
+				if(strlen(menu_current_dir) >= sizeof(menu_current_dir)-13-1) { // 13 for 8.3 filename with trailing slash, 1 for null terminator
+					// The path's too long
+					// We must reserve enough space for storing the filename next time we select a file.
+					// Since the path's too long, we need to get out of here and show error to the end-user
+					directory_up(menu_current_dir);
+					file_io_result = FR_PATH_LENGTH_ERROR;
+					// Here, now that I just need to wait for the (file_io_result != FR_OK) handling way below
 				} else {
-					// Failed to load the game.
-					// Do nothing. Just wait for error handling for file_io_result != FR_OK
+					// After entering the directory, reset the cursor to the beginning
+					menu_offset = 0;
+					menu_cache_invalidated = true;
+					menu_dir_reload_required = true;
 				}
+			} else {
+				// Load INI config
+				memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "INI", 3); // replace file extension to .INI
+				file_io_result = file_load_config(menu_current_dir, chip8_cfg);
+
+				if(file_io_result == FR_OK) {
+					// Config file loaded successfully. Let's try loading the game!
+					memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "CH8", 3); // resume file extension of .CH8
+					file_io_result = file_load_rom(menu_current_dir, chip8_cfg, &chip8);
+					menu_cache_invalidated = true;
+					if(file_io_result == FR_OK) {
+						prepare_game_launch();
+						if(chip8_cfg->input_navigation || chip8_cfg->input_action || chip8_cfg->input_layout) {
+							// If specified in the config INI file, show input buttons and the layout
+							menu_display_update_required = true;
+							screen_state = SCREEN_PRE_GAMEPLAY;
+						} else {
+							// If the input buttons haven't been specified in the config file, just run the game!
+							get_rid_of_all_button_events();
+							screen_state = SCREEN_GAMEPLAY;
+						}
+					} else {
+						// Failed to load the game.
+						// Do nothing. Just wait for error handling for file_io_result != FR_OK
+					}
+				}
+				directory_remove_filename(menu_current_dir);
 			}
-			directory_remove_filename(menu_current_dir);
+		} else if(button_press & (1<<0x10)) { // The X button
+			// Up a directory
+			directory_up(menu_current_dir);
+			// Always reload directory so that the user would have visual feedback
+			menu_offset = 0;
+			menu_cache_invalidated = true;
+			menu_dir_reload_required = true;
+		} else {
+			if(button_press & (1<<2)) { menu_offset--; }
+			if(button_press & (1<<8)) { menu_offset++; }
+			if(button_press & (1<<4)) { menu_offset -= 10; }
+			if(button_press & (1<<6)) { menu_offset += 10; }
 		}
-	} else if(button_press & (1<<0x10)) { // The X button
-		// Up a directory
-		directory_up(menu_current_dir);
-		// Always reload directory so that the user would have visual feedback
-		menu_offset = 0;
-		menu_cache_invalidated = true;
-		menu_dir_reload_required = true;
-	} else {
-		if(button_press & (1<<2)) { menu_offset--; }
-		if(button_press & (1<<8)) { menu_offset++; }
-		if(button_press & (1<<4)) { menu_offset -= 10; }
-		if(button_press & (1<<6)) { menu_offset += 10; }
-	}
-	if(screen_state != SCREEN_MENU) {
-		return;
+		if(screen_state != SCREEN_MENU) {
+			return;
+		}
 	}
 
 	if(menu_offset < 0) {
@@ -973,7 +979,10 @@ static void screen_gameplay_handler(void) {
 			if(memcmp(last_storage_flag, chip8.periph.storage_flags, sizeof(chip8.periph.storage_flags))) {
 				// Storage flag changed. Let's save it!
 				file_io_result = file_save_storage_flag(chip8.periph.storage_flags, sizeof(chip8.periph.storage_flags));
-				menu_cache_invalidated = true; // file content changed. file tree of the dircectory may be changed. Need to invalidate cache
+				// file content changed. file tree of the dircectory may be changed. Need to invalidate cache
+				// (Actually as of the time of writing the menu_cache_invalidated is already set true upon game load.
+				// Still, I'd be better off setting it here again for now because the assumption above might not hold true in the future)
+				menu_cache_invalidated = true;
 			}
 
 			if(file_io_result != FR_OK) {
