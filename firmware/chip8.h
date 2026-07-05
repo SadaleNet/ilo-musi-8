@@ -107,6 +107,8 @@ struct chip8_config {
 	uint32_t quirks;
 	uint8_t speed; // Unit: cycle per frame. fps is always 60 Hz.
 	uint8_t input_layout; // Datatype: enum chip8_input_layout. The keyboard layout. For showing on SCREEN_PRE_GAMEPLAY. No actual in-game function.
+	uint8_t audio_pitch;
+	uint8_t reserved; // for padding the next field to 32-bit boundary
 	uint16_t input_navigation; // Buttons for navigation. For showing on SCREEN_PRE_GAMEPLAY. No actual in-game function.
 	uint16_t input_action; // Buttons for control. Ditto.
 	uint16_t input_replay; // Buttons for replay. Ditto.
@@ -116,12 +118,13 @@ void chip8_step(struct chip8_machine *machine);
 void chip8_timer_step(struct chip8_machine *machine);
 void chip8_init(struct chip8_machine *machine, const struct chip8_config *config);
 
+
 #define CHIP8_QUIRK_PLATFORM_VIP (CHIP8_QUIRK_VBLANK|CHIP8_QUIRK_LOGIC) // 0x00000060
 #define CHIP8_QUIRK_PLATFORM_SCHIP (CHIP8_QUIRK_SHIFT|CHIP8_QUIRK_MEMORY_LEAVE_I_UNCHANGED|CHIP8_QUIRK_JUMP|CHIP8_QUIRK_HIRES_COLLISION)  // 0x00000413
 #define CHIP8_QUIRK_PLATFORM_OCTO (CHIP8_QUIRK_WRAP|CHIP8_QUIRK_LORES_WIDE_SPRITE|CHIP8_QUIRK_RESIZE_CLEAR_SCREEN) // 0x00000888
 
 // 500Hz squarewave, pulse width: 8 samples, 50% duty cycle
 #define CHIP8_DEFAULT_AUDIO_SAMPLE ((uint8_t[CHIP8_AUDIO_BUFFER_SIZE]){0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0})
-#define CHIP8_DEFAULT_AUDIO_PITCH (64U)
+#define CHIP8_DEFAULT_AUDIO_PITCH (64U) // 4000 Hz sampling rate by default as specified in XO-Chip's specs
 
 extern const struct chip8_config CHIP8_CFG_DEFAULT;

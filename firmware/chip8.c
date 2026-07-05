@@ -65,6 +65,7 @@ const struct chip8_config CHIP8_CFG_DEFAULT = {
 		0xFF, 0xFF, 0xC0, 0xC0, 0xFF, 0xFF, 0xC0, 0xC0, 0xFF, 0xFF, // E
 		0xFF, 0xFF, 0xC0, 0xC0, 0xFF, 0xFF, 0xC0, 0xC0, 0xC0, 0xC0  // F
 	},
+	.audio_pitch = CHIP8_DEFAULT_AUDIO_PITCH,
 	.audio = CHIP8_DEFAULT_AUDIO_SAMPLE,
 	.storage_flags = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
 	.quirks = CHIP8_QUIRK_PLATFORM_OCTO,
@@ -664,7 +665,7 @@ void chip8_init(struct chip8_machine *machine, const struct chip8_config *config
 	machine->cpu.quirks = config->quirks;
 
 	memset(&machine->periph, 0, sizeof(machine->periph));
-	machine->periph.audio_pitch = CHIP8_DEFAULT_AUDIO_PITCH; // 4000 Hz sampling rate by default as specified in XO-Chip's specs
+	machine->periph.audio_pitch = config->audio_pitch;
 	memcpy(machine->periph.audio, config->audio, sizeof(config->audio));
 	memcpy(machine->periph.storage_flags, config->storage_flags, sizeof(config->storage_flags));
 }

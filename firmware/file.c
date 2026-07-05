@@ -40,6 +40,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <limits.h>
 #include <assert.h>
 
 #define FLASH_FILE "ILOMUSI8.BIN"
@@ -135,6 +136,7 @@ enum ini_key {
 	PARSING_INI_QUIRKS,
 	PARSING_INI_SPEED,
 	PARSING_INI_AUDIO,
+	PARSING_INI_AUDIO_PITCH,
 	PARSING_INI_FONT,
 	PARSING_INI_FONT_LARGE,
 	PARSING_INI_LAYOUT,
@@ -164,15 +166,20 @@ static uint8_t file_parse_ini_hex2uint(char c) {
 }
 
 static bool file_parse_dec_uint8(uint8_t *output_value, size_t parse_index, char c) {
-	if(parse_index >= 2) {
+	uint32_t result = *output_value;
+	if(parse_index >= 3) {
 		return false;
 	}
 	if(c >= '0' && c <= '9') {
-		*output_value *= 10;
-		*output_value += c - '0';
+		result *= 10;
+		result += c - '0';
 	} else {
 		return false;
 	}
+	if(result > UINT8_MAX) {
+		return false;
+	}
+	*output_value = result;
 	return true;
 }
 
@@ -222,6 +229,9 @@ static bool file_parse_ini(struct ini_parser *parser, const uint8_t *buffer, siz
 						} else if(!strcmp(parser->parsing_key, "audio") || !strcmp(parser->parsing_key, "kalama")) {
 							parser->parsing_key_type = PARSING_INI_AUDIO;
 							memset(parser->output_cfg->audio, 0, sizeof(parser->output_cfg->audio));
+						} else if(!strcmp(parser->parsing_key, "pitch") || !strcmp(parser->parsing_key, "wawa-kalama")) {
+							parser->parsing_key_type = PARSING_INI_AUDIO_PITCH;
+							parser->output_cfg->audio_pitch = 0;
 						} else if(!strcmp(parser->parsing_key, "font") || !strcmp(parser->parsing_key, "sitelen")) {
 							parser->parsing_key_type = PARSING_INI_FONT;
 							memset(parser->output_cfg->font, 0, sizeof(parser->output_cfg->font));
@@ -280,6 +290,9 @@ static bool file_parse_ini(struct ini_parser *parser, const uint8_t *buffer, siz
 							break;
 							case PARSING_INI_AUDIO:
 								if(!file_parse_buffer(&parser->output_cfg->audio, sizeof(parser->output_cfg->audio), parser->parse_index, c)) { return false; }
+							break;
+							case PARSING_INI_AUDIO_PITCH:
+								if(!file_parse_dec_uint8(&parser->output_cfg->audio_pitch, parser->parse_index, c)) { return false; }
 							break;
 							case PARSING_INI_FONT:
 								if(!file_parse_buffer(&parser->output_cfg->font, sizeof(parser->output_cfg->font), parser->parse_index, c)) { return false; }
@@ -446,6 +459,9 @@ uint8_t file_save_config(const char *path, const struct chip8_config *chip8_cfg)
 				index += sprintf((char*)&bulkmem->file_buffer[index], "audio = ");
 				index += file_print_hex_buffer((char*)&bulkmem->file_buffer[index], chip8_cfg->audio, sizeof(chip8_cfg->audio));
 				index += sprintf((char*)&bulkmem->file_buffer[index], "\n");
+			}
+			if(chip8_cfg->audio_pitch != CHIP8_CFG_DEFAULT.audio_pitch) {
+				index += sprintf((char*)&bulkmem->file_buffer[index], "pitch = %u\n", chip8_cfg->audio_pitch);
 			}
 			if(chip8_cfg->input_layout != CHIP8_CFG_DEFAULT.input_layout) {
 				index += sprintf((char*)&bulkmem->file_buffer[index], "layout = %u\n", chip8_cfg->input_layout);
