@@ -95,10 +95,6 @@ enum global_config_selection {
 	GLOBAL_CONFIG_BOOT_ROM,
 };
 
-static struct chip8_machine chip8;
-struct chip8_config chip8_cfg;
-struct shared_buffer *bulkmem;
-
 static uint32_t chip8_keymap(uint32_t button_state) {
 	// Converts from the left layout to the right layout
 	//      [16]                      [0x10]
@@ -142,8 +138,16 @@ static void directory_up(char *directory_str) {
 	}
 }
 
+// Shared buffer definition for saving RAM space
+union {
+	struct chip8_config chip8_cfg; // Used in all screens except for SCREEN_GAMEPLAY
+	uint8_t game_paused_screen_buffer_backup[GAMEPLAY_EXIT_BANNER_ROW_HEIGHT][DISPLAY_WIDTH]; // Used in SCREEN_GAMEPLAY
+} union_buffer;
 
 // Shared by all screens
+struct shared_buffer *bulkmem;
+static struct chip8_machine chip8;
+struct chip8_config *chip8_cfg;
 enum screen_state screen_state;
 struct global_config global_config;
 struct global_config global_config_backup;
@@ -172,14 +176,14 @@ uint32_t global_config_old_value;
 uint32_t global_config_buzzer_start_tick;
 
 // For SCREEN_GAMEPLAY
-uint8_t last_storage_flag[sizeof(chip8_cfg.storage_flags)/sizeof(*chip8_cfg.storage_flags)]; // storage flag state upon game launch
+uint8_t last_storage_flag[sizeof(chip8_cfg->storage_flags)/sizeof(*chip8_cfg->storage_flags)]; // storage flag state upon game launch
 uint32_t game_min_cycle_interval;
 uint32_t last_frame_processed_tick;
 uint32_t last_lcd_blit_tick;
 uint8_t game_paused;
 bool game_is_bootrom;
 uint32_t game_paused_start_tick;
-uint8_t game_paused_screen_buffer_backup[GAMEPLAY_EXIT_BANNER_ROW_HEIGHT][DISPLAY_WIDTH]; // for showing pause state
+uint8_t (*game_paused_screen_buffer_backup)[DISPLAY_WIDTH]; // for showing pause state
 
 static void get_rid_of_all_button_events(void) {
 	// Clean screen reasons:
@@ -296,14 +300,14 @@ static void screen_error_handler(void) {
 }
 
 static void prepare_game_launch(void) {
-	memcpy(last_storage_flag, chip8_cfg.storage_flags, sizeof(chip8_cfg.storage_flags));
+	memcpy(last_storage_flag, chip8_cfg->storage_flags, sizeof(chip8_cfg->storage_flags));
 	// Initialize peripheral variables
 	buzzer_set_buffer(chip8.periph.audio);
 	buzzer_set_pitch(chip8.periph.audio_pitch);
-	if(chip8_cfg.speed == 0) {
+	if(chip8_cfg->speed == 0) {
 		game_min_cycle_interval = 0; // Unlimited framerate
 	} else {
-		game_min_cycle_interval = FUNCONF_SYSTEM_CORE_CLOCK/60/chip8_cfg.speed;
+		game_min_cycle_interval = FUNCONF_SYSTEM_CORE_CLOCK/60/chip8_cfg->speed;
 	}
 	last_frame_processed_tick = systick_now - game_min_cycle_interval;
 	last_lcd_blit_tick = systick_now - FUNCONF_SYSTEM_CORE_CLOCK/60;
@@ -322,7 +326,7 @@ static void screen_menu_handler(void) {
 			// Load the INI file into chip8_cfg, then restore menu_current_dir's content
 			directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
 			memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "INI", 3);
-			file_io_result = file_load_config(menu_current_dir, &chip8_cfg);
+			file_io_result = file_load_config(menu_current_dir, chip8_cfg);
 			directory_remove_filename(menu_current_dir);
 			// Head to the game config screen
 			screen_state = (file_io_result == FR_OK) ? SCREEN_GAME_CONFIG : SCREEN_ERROR;
@@ -353,16 +357,16 @@ static void screen_menu_handler(void) {
 		} else {
 			// Load INI config
 			memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "INI", 3); // replace file extension to .INI
-			file_io_result = file_load_config(menu_current_dir, &chip8_cfg);
+			file_io_result = file_load_config(menu_current_dir, chip8_cfg);
 
 			if(file_io_result == FR_OK) {
 				// Config file loaded successfully. Let's try loading the game!
 				memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "CH8", 3); // resume file extension of .CH8
-				file_io_result = file_load_rom(menu_current_dir, &chip8_cfg, &chip8);
+				file_io_result = file_load_rom(menu_current_dir, chip8_cfg, &chip8);
 				menu_cache_invalidated = true;
 				if(file_io_result == FR_OK) {
 					prepare_game_launch();
-					if(chip8_cfg.input_navigation || chip8_cfg.input_action || chip8_cfg.input_layout) {
+					if(chip8_cfg->input_navigation || chip8_cfg->input_action || chip8_cfg->input_layout) {
 						// If specified in the config INI file, show input buttons and the layout
 						menu_display_update_required = true;
 						screen_state = SCREEN_PRE_GAMEPLAY;
@@ -482,8 +486,8 @@ static void screen_game_config_handler(void) {
 				menu_display_update_required = true;
 			} else if(button_press & (1<<0xB)) { // The B button
 				game_config_index = 0;
-				game_config_old_value = chip8_cfg.speed;
-				chip8_cfg.speed = 0;
+				game_config_old_value = chip8_cfg->speed;
+				chip8_cfg->speed = 0;
 				menu_display_update_required = true;
 				game_config_selection = GAME_CONFIG_SPEED;
 			} else if(button_press & (1<<0xC)) { // The C button
@@ -492,7 +496,7 @@ static void screen_game_config_handler(void) {
 			} else if(button_press & (1<<0xF)) { // The F button
 				directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
 				memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "INI", 3);
-				file_io_result = file_save_config(menu_current_dir, &chip8_cfg);
+				file_io_result = file_save_config(menu_current_dir, chip8_cfg);
 				directory_remove_filename(menu_current_dir);
 
 				screen_state = (file_io_result == FR_OK) ? SCREEN_MENU : SCREEN_ERROR;
@@ -507,18 +511,18 @@ static void screen_game_config_handler(void) {
 		case GAME_CONFIG_QUIRKS:
 			if(button_press & ((1<<0x1)|(1<<0x2)|(1<<0x3))) {
 				if(button_press & (1<<0x1)) {
-					chip8_cfg.quirks = CHIP8_QUIRK_PLATFORM_VIP;
+					chip8_cfg->quirks = CHIP8_QUIRK_PLATFORM_VIP;
 				} else if(button_press & (1<<0x2)) {
-					chip8_cfg.quirks = CHIP8_QUIRK_PLATFORM_SCHIP;
+					chip8_cfg->quirks = CHIP8_QUIRK_PLATFORM_SCHIP;
 				} else if(button_press & (1<<0x3)) {
-					chip8_cfg.quirks = CHIP8_QUIRK_PLATFORM_OCTO;
+					chip8_cfg->quirks = CHIP8_QUIRK_PLATFORM_OCTO;
 				}
 				game_config_selection = GAME_CONFIG_MAIN;
 				menu_display_update_required = true;
 			} else if(button_press & (1<<0x4)) {
 				game_config_selection = GAME_CONFIG_QUIRKS_CUSTOM;
-				game_config_old_value = chip8_cfg.quirks;
-				chip8_cfg.quirks = 0;
+				game_config_old_value = chip8_cfg->quirks;
+				chip8_cfg->quirks = 0;
 				game_config_index = 0;
 				menu_display_update_required = true;
 			} else if(button_press & (1<<0x10)) {
@@ -529,7 +533,7 @@ static void screen_game_config_handler(void) {
 		case GAME_CONFIG_QUIRKS_CUSTOM:
 			if(button_press & (1<<0x10)) {
 				if(game_config_index == 0) {
-					chip8_cfg.quirks = game_config_old_value;
+					chip8_cfg->quirks = game_config_old_value;
 					game_config_selection = GAME_CONFIG_MAIN;
 					menu_display_update_required = true;
 					break;
@@ -540,9 +544,9 @@ static void screen_game_config_handler(void) {
 						// That's because C standard said that for shift operator,
 						// for 32bit datawidth, rhs value of >= 32 is undefined behavior.
 						// Trust me. I just got burned by that.
-						chip8_cfg.quirks = 0;
+						chip8_cfg->quirks = 0;
 					} else {
-						chip8_cfg.quirks &= 0xFFFFFFFF << (4*(8-game_config_index));
+						chip8_cfg->quirks &= 0xFFFFFFFF << (4*(8-game_config_index));
 					}
 					menu_display_update_required = true;
 				}
@@ -550,7 +554,7 @@ static void screen_game_config_handler(void) {
 			for(uint32_t i=0; i<16; i++) {
 				if(button_press & (1<<i)) {
 					menu_display_update_required = true;
-					chip8_cfg.quirks |= i << (4*(7-game_config_index));
+					chip8_cfg->quirks |= i << (4*(7-game_config_index));
 					if(++game_config_index >= 8) {
 						game_config_selection = GAME_CONFIG_MAIN;
 						break;
@@ -561,11 +565,11 @@ static void screen_game_config_handler(void) {
 		case GAME_CONFIG_SPEED:
 			if(button_press & (1<<0x10)) {
 				if(game_config_index == 0) {
-					chip8_cfg.speed = game_config_old_value;
+					chip8_cfg->speed = game_config_old_value;
 					game_config_selection = GAME_CONFIG_MAIN;
 					menu_display_update_required = true;
 				} else if(game_config_index == 1) {
-					chip8_cfg.speed = 0;
+					chip8_cfg->speed = 0;
 					game_config_index--;
 					menu_display_update_required = true;
 				} else {
@@ -575,11 +579,11 @@ static void screen_game_config_handler(void) {
 			for(uint32_t i=0; i<10; i++) {
 				if(button_press & (1<<i)) {
 					if(game_config_index == 0) {
-						chip8_cfg.speed += i*10;
+						chip8_cfg->speed += i*10;
 						game_config_index++;
 						menu_display_update_required = true;
 					} else if(game_config_index == 1) {
-						chip8_cfg.speed += i;
+						chip8_cfg->speed += i;
 						game_config_selection = GAME_CONFIG_MAIN;
 						menu_display_update_required = true;
 						break;
@@ -589,9 +593,9 @@ static void screen_game_config_handler(void) {
 		break;
 		case GAME_CONFIG_BOOT_ROM:
 			if(button_press & (1<<0xF)) {
-				memset(chip8_cfg.storage_flags, 0, sizeof(chip8_cfg.storage_flags)); // Never save the storage flag into the bootrom
+				memset(chip8_cfg->storage_flags, 0, sizeof(chip8_cfg->storage_flags)); // Never save the storage flag into the bootrom
 				directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
-				file_io_result = bootrom_program(menu_current_dir, &chip8_cfg);
+				file_io_result = bootrom_program(menu_current_dir, chip8_cfg);
 				directory_remove_filename(menu_current_dir);
 				if(file_io_result == FR_OK) {
 					game_config_selection = GAME_CONFIG_MAIN;
@@ -622,11 +626,11 @@ static void screen_game_config_handler(void) {
 
 		if(game_config_selection == GAME_CONFIG_QUIRKS_CUSTOM) {
 			char value_str[9];
-			sprintf(value_str, "%08lX", chip8_cfg.quirks);
+			sprintf(value_str, "%08lX", chip8_cfg->quirks);
 			value_str[game_config_index] = '\0';
 			draw_text(chip8.periph.display, value_str, 78, 14);
 		} else {
-			switch(chip8_cfg.quirks) {
+			switch(chip8_cfg->quirks) {
 				case CHIP8_QUIRK_PLATFORM_VIP:
 					draw_text(chip8.periph.display, ".....VIP", 78, 14);
 				break;
@@ -639,7 +643,7 @@ static void screen_game_config_handler(void) {
 				default:
 				{
 					char value_str[9];
-					sprintf(value_str, "%08lX", chip8_cfg.quirks);
+					sprintf(value_str, "%08lX", chip8_cfg->quirks);
 					draw_text(chip8.periph.display, value_str, 78, 14);
 				}
 				break;
@@ -648,14 +652,14 @@ static void screen_game_config_handler(void) {
 		if(game_config_selection == GAME_CONFIG_SPEED) {
 			if(game_config_index == 1) {
 				char value_str[2];
-				value_str[0] = (chip8_cfg.speed/10) + '0';
+				value_str[0] = (chip8_cfg->speed/10) + '0';
 				value_str[1] = '\0';
 				draw_text(chip8.periph.display, value_str, 114, 23);
 			}
 		} else {
 			char value_str[3];
-			value_str[0] = (chip8_cfg.speed/10) + '0';
-			value_str[1] = (chip8_cfg.speed%10) + '0';
+			value_str[0] = (chip8_cfg->speed/10) + '0';
+			value_str[1] = (chip8_cfg->speed%10) + '0';
 			value_str[2] = '\0';
 			draw_text(chip8.periph.display, value_str, 114, 23);
 		}
@@ -886,25 +890,25 @@ static void screen_pre_gameplay_handler(void) {
 		draw_clear(chip8.periph.display);
 		draw_text(chip8.periph.display, "CONTROLS", 40, 0);
 		char button_str[17];
-		if(chip8_cfg.input_navigation) {
-			util_print_button_buffer(button_str, chip8_cfg.input_navigation);
+		if(chip8_cfg->input_navigation) {
+			util_print_button_buffer(button_str, chip8_cfg->input_navigation);
 			uint8_t x = DISPLAY_WIDTH/2-(ICON_NAVIGATION_LENGTH+1+6*strlen(button_str))/2;
 			draw_bitmap_h8(chip8.periph.display, ICON_NAVIGATION, ICON_NAVIGATION_LENGTH, x, 10);
 			draw_text(chip8.periph.display, button_str, x+ICON_NAVIGATION_LENGTH+1, 11);
 		}
-		if(chip8_cfg.input_action) {
-			util_print_button_buffer(button_str, chip8_cfg.input_action);
+		if(chip8_cfg->input_action) {
+			util_print_button_buffer(button_str, chip8_cfg->input_action);
 			uint8_t x = DISPLAY_WIDTH/2-(ICON_ACTION_LENGTH+1+6*strlen(button_str))/2;
 			draw_bitmap_h8(chip8.periph.display, ICON_ACTION, ICON_ACTION_LENGTH, x, 20);
 			draw_text(chip8.periph.display, button_str, x+ICON_ACTION_LENGTH+1, 21);
 		}
-		if(chip8_cfg.input_replay) {
-			util_print_button_buffer(button_str, chip8_cfg.input_replay);
+		if(chip8_cfg->input_replay) {
+			util_print_button_buffer(button_str, chip8_cfg->input_replay);
 			uint8_t x = DISPLAY_WIDTH/2-(ICON_REPLAY_LENGTH+1+6*strlen(button_str))/2;
 			draw_bitmap_h8(chip8.periph.display, ICON_REPLAY, ICON_REPLAY_LENGTH, x, 30);
 			draw_text(chip8.periph.display, button_str, x+ICON_REPLAY_LENGTH+1, 31);
 		}
-		switch(chip8_cfg.input_layout) {
+		switch(chip8_cfg->input_layout) {
 			case CHIP8_LAYOUT_QWERTY:
 				draw_text(chip8.periph.display, "123C  1234", 34, 40);
 				draw_text(chip8.periph.display, "456D  QWER", 34, 40+6);
@@ -1146,6 +1150,8 @@ int main() {
 
 	static_assert(sizeof(struct shared_buffer) <= sizeof(chip8.mem));
 	bulkmem = (struct shared_buffer*)chip8.mem;
+	chip8_cfg = &union_buffer.chip8_cfg;
+	game_paused_screen_buffer_backup = union_buffer.game_paused_screen_buffer_backup;
 
 	// Shared by all screens except for SCREEN_GAMEPLAY
 	menu_display_update_required = true;
@@ -1187,7 +1193,7 @@ int main() {
 			// After the bootrom exits, the error would be shown
 			// There's a slight chance that the file_io_result would be overwritten but that's ok
 			// because we're already having io error. Chances are that it'd just be replaced by another error
-			if(bootrom_load(&chip8_cfg, &chip8)) {
+			if(bootrom_load(chip8_cfg, &chip8)) {
 				prepare_game_launch();
 				game_is_bootrom = true;
 				screen_state = SCREEN_GAMEPLAY;
