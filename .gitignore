@@ -1,4 +1,5 @@
-kicad/ilomusiali-backups/**
+kicad/.history
+kicad/ilomusiali-backups
 kicad/fp-info-cache
 kicad/production
 firmware/*.elf
@@ -6,6 +7,7 @@ firmware/*.hex
 firmware/*.lst
 firmware/*.map
 firmware/build.sh
+firmware/script/__pycache__
 bootloader/*.elf
 bootloader/*.hex
 bootloader/*.lst

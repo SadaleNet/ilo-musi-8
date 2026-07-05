@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 # Copyright 2026 Wong Cho Ching <https://sadale.net>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -25,6 +23,8 @@
 # LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
+
+from util import to_c_array, bitmap_to_bytes
 
 BITMAP = {
 ' ':
@@ -863,89 +863,18 @@ __X____
 ''',
 }
 
-def bitmap_to_bytes(bitmap):
-	lines = [i.replace('\n', '') for i in bitmap.split('\n')[1:][:-1]] # remove the first and the final \n
-	width = len(lines[0])
-	ret = [0 for i in range(width)]
-	assert(len(lines) < 8) # This function doesn't support image taller than 8px
-	# Column major. The top bit is LSB.
-	for c in range(width):
-		for r in range(len(lines)):
-			if lines[r][c] == 'X':
-				ret[c] |= (1 << r)
-	return bytes(ret)
+def print_font_and_icon_tables():
+	print("const uint8_t FONT_ASCII[0x5F][5] = {")
 
+	for i in range(0x20, 0x7F):
+		c = chr(i)
+		print(f"\t{{{to_c_array(bitmap_to_bytes(BITMAP[c]))} }}, // {c.replace('\\', '(backslash)')}")
 
-def to_c_array(b, digits=2, linesplit=16):
-	lines = []
-	for i in range((len(b)+linesplit-1)//linesplit):
-		lines.append(' '.join([f"0x{j:0{digits}X}," for j in b[i*linesplit:(i+1)*linesplit]]))
-	return '\n'.join(lines)
+	print("};")
+	print("")
 
-print("// This file was generated with font_crc.py. Do not manually modify or it'll be overwritten.")
-print("#include <stdint.h>")
-print("#include <stddef.h>")
-print("const uint8_t FONT_ASCII[0x5F][5] = {")
-for i in range(0x20, 0x7F):
-	c = chr(i)
-	print(f"\t{{{to_c_array(bitmap_to_bytes(BITMAP[c]))} }}, // {c.replace('\\', '(backslash)')}")
-
-print("};")
-print("")
-
-for k, v in BITMAP_ICONS.items():
-	bitmap = bitmap_to_bytes(v)
-	print(f"const uint8_t ICON_{k}[] = {{{to_c_array(bitmap)} }};")
-	print(f"const size_t ICON_{k}_LENGTH = {len(bitmap)};")
-
-print("")
-print("")
-
-# Below starts the CRC table generation
-
-def get_mask_by_bitwidth(bitwidth):
-	ret = 0
-	for i in range(bitwidth):
-		ret |= 1<<i
-	return ret
-
-def compute_crc_single(polynomial, bitwidth, b):
-	mask = get_mask_by_bitwidth(bitwidth)
-	polynomial &= mask
-
-	if bitwidth < 8:
-		ret = b >> (8-bitwidth)
-		for i in range(8-bitwidth):
-			p = polynomial if (ret & (1<<(bitwidth-1))) else 0
-			ret <<= 1
-			ret |= 1 if (b & (1<<(8-bitwidth-1-i))) else 0
-			ret ^= p
-			ret &= mask
-	else:
-		ret = b
-
-	for i in range(bitwidth):
-		p = polynomial if (ret & (1<<(bitwidth-1))) else 0
-		ret <<= 1
-		ret ^= p
-		ret &= mask
-	return ret
-
-# For verifying if the table's correct
-def compute_crc_by_table(table, bitwidth, crc, payload):
-	mask = get_mask_by_bitwidth(bitwidth)
-	for b in payload:
-		if bitwidth < 8:
-			crc = table[(crc << (8-bitwidth)) ^ b]
-		else:
-			crc = (crc << 8) ^ table[(crc >> (bitwidth-8)) ^ b]
-		crc &= mask
-	return crc
-
-CRC7_TABLE = [compute_crc_single(0x89, 7, i) for i in range(256)]
-CRC16_TABLE = [compute_crc_single(0x1021, 16, i) for i in range(256)]
-CRC32_TABLE = [compute_crc_single(0x04C11DB7, 32, i) for i in range(256)]
-
-print(f"const uint8_t CRC7_TABLE[] = {{ // Polynomial 0x89\n{to_c_array(CRC7_TABLE)} }};")
-print(f"const uint16_t CRC16_TABLE[] = {{ // Polynomial 0x1021\n{to_c_array(CRC16_TABLE, 4)} }};")
-print(f"const uint32_t CRC32_TABLE[] = {{ // Polynomial 0x04C11DB7\n{to_c_array(CRC32_TABLE, 8, 8)} }};")
+	for k, v in BITMAP_ICONS.items():
+		bitmap = bitmap_to_bytes(v)
+		print(f"const uint8_t ICON_{k}[] = {{{to_c_array(bitmap)} }};")
+		print(f"const size_t ICON_{k}_LENGTH = {len(bitmap)};")
+	print("")
