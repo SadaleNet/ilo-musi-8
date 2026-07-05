@@ -597,6 +597,7 @@ void chip8_timer_step(struct chip8_machine *machine) {
 }
 
 void chip8_init(struct chip8_machine *machine, const struct chip8_config *config) {
+	memset(machine->mem, 0, sizeof(machine->mem));
 	memcpy(machine->mem, config->font, sizeof(config->font));
 	memcpy(&machine->mem[sizeof(config->font)], config->font_highres, sizeof(config->font_highres));
 
