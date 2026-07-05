@@ -163,7 +163,6 @@ bool menu_cache_invalidated; // Must invalidate upon bulkmem's filled by game RO
 int menu_offset;
 uint8_t file_io_result;
 size_t menu_file_count_of_current_page;
-bool menu_dir_reload_required;
 
 // For SCREEN_GAME_CONFIG
 enum game_config_selection game_config_selection;
@@ -182,8 +181,8 @@ uint32_t last_frame_processed_tick;
 uint32_t last_lcd_blit_tick;
 uint8_t game_paused;
 bool game_is_bootrom;
-uint32_t game_paused_start_tick;
-uint8_t (*game_paused_screen_buffer_backup)[DISPLAY_WIDTH]; // for showing pause state
+uint32_t game_paused_start_tick; // After pausing for long enough (i.e. holding X for long enough), the game would be quit.
+uint8_t (*game_paused_screen_buffer_backup)[DISPLAY_WIDTH]; // The pause message overlays on the game's display. Need to restore upon unpause.
 
 static void get_rid_of_all_button_events(void) {
 	// Clean screen reasons:
@@ -234,9 +233,8 @@ static void screen_error_handler(void) {
 		uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
 		if(button_press & (1<<0x10)) {
 			menu_current_dir[0] = '\0';
-			menu_cache_invalidated = true;
 			menu_offset = 0;
-			menu_dir_reload_required = true;
+			menu_cache_invalidated = true;
 			screen_state = SCREEN_MENU;
 		} else if((button_press & (1<<0xD))) { // Allows visiting global config screen with D button even with card error
 			memcpy(&global_config_backup, &global_config, sizeof(global_config_backup));
@@ -355,7 +353,6 @@ static void screen_menu_handler(void) {
 					// After entering the directory, reset the cursor to the beginning
 					menu_offset = 0;
 					menu_cache_invalidated = true;
-					menu_dir_reload_required = true;
 				}
 			} else {
 				// Load INI config
@@ -391,7 +388,6 @@ static void screen_menu_handler(void) {
 			// Always reload directory so that the user would have visual feedback
 			menu_offset = 0;
 			menu_cache_invalidated = true;
-			menu_dir_reload_required = true;
 		} else {
 			if(button_press & (1<<2)) { menu_offset--; }
 			if(button_press & (1<<8)) { menu_offset++; }
@@ -411,7 +407,9 @@ static void screen_menu_handler(void) {
 		menu_display_update_required = true;
 	}
 
-	if(menu_dir_reload_required || menu_offset/MENU_PAGE_SIZE != menu_offset_prev/MENU_PAGE_SIZE) {
+	if(menu_cache_invalidated || menu_offset/MENU_PAGE_SIZE != menu_offset_prev/MENU_PAGE_SIZE) {
+		// Clear the screen just in case loading directory took long.
+		// The cleared screen is a form of visual feedback to the user
 		draw_clear(chip8.periph.display);
 		lcd_transfer_begin(chip8.periph.display);
 
@@ -427,9 +425,6 @@ static void screen_menu_handler(void) {
 					continue;
 				}
 				menu_display_update_required = true;
-				menu_dir_reload_required = false;
-				last_frame_processed_tick = systick_now;
-				last_lcd_blit_tick = systick_now;
 				break;
 			} else {
 				break; // Skip to error handling mechanism
@@ -486,8 +481,8 @@ static void screen_game_config_handler(void) {
 	switch(game_config_selection) {
 		case GAME_CONFIG_MAIN:
 			if(button_press & (1<<0xA)) { // The A button
-				game_config_selection = GAME_CONFIG_QUIRKS;
 				menu_display_update_required = true;
+				game_config_selection = GAME_CONFIG_QUIRKS;
 			} else if(button_press & (1<<0xB)) { // The B button
 				game_config_index = 0;
 				game_config_old_value = chip8_cfg->speed;
@@ -495,22 +490,21 @@ static void screen_game_config_handler(void) {
 				menu_display_update_required = true;
 				game_config_selection = GAME_CONFIG_SPEED;
 			} else if(button_press & (1<<0xC)) { // The C button
-				game_config_selection = GAME_CONFIG_BOOT_ROM;
 				menu_display_update_required = true;
+				game_config_selection = GAME_CONFIG_BOOT_ROM;
 			} else if(button_press & (1<<0xF)) { // The F button
 				directory_attach_filename(menu_current_dir, menu_file_list[menu_offset_on_current_page]);
 				memcpy(&menu_current_dir[strlen(menu_current_dir)-3], "INI", 3);
 				file_io_result = file_save_config(menu_current_dir, chip8_cfg);
 				directory_remove_filename(menu_current_dir);
 
-				screen_state = (file_io_result == FR_OK) ? SCREEN_MENU : SCREEN_ERROR;
 				menu_cache_invalidated = true; // INI file updated. file tree of the dircectory may be changed. Need to invalidate cache
-				menu_dir_reload_required = true; // Since the cache's invalidated, the directory must also be reloaded
 				menu_display_update_required = true;
+				screen_state = (file_io_result == FR_OK) ? SCREEN_MENU : SCREEN_ERROR;
 			} else if(button_press & (1<<0x10)) { // The X button
 				// Discard game config by not saving it
-				screen_state = SCREEN_MENU;
 				menu_display_update_required = true;
+				screen_state = SCREEN_MENU;
 			}
 		break;
 		case GAME_CONFIG_QUIRKS:
@@ -522,25 +516,25 @@ static void screen_game_config_handler(void) {
 				} else if(button_press & (1<<0x3)) {
 					chip8_cfg->quirks = CHIP8_QUIRK_PLATFORM_OCTO;
 				}
-				game_config_selection = GAME_CONFIG_MAIN;
 				menu_display_update_required = true;
+				game_config_selection = GAME_CONFIG_MAIN;
 			} else if(button_press & (1<<0x4)) {
-				game_config_selection = GAME_CONFIG_QUIRKS_CUSTOM;
 				game_config_old_value = chip8_cfg->quirks;
 				chip8_cfg->quirks = 0;
 				game_config_index = 0;
 				menu_display_update_required = true;
+				game_config_selection = GAME_CONFIG_QUIRKS_CUSTOM;
 			} else if(button_press & (1<<0x10)) {
-				game_config_selection = GAME_CONFIG_MAIN;
 				menu_display_update_required = true;
+				game_config_selection = GAME_CONFIG_MAIN;
 			}
 		break;
 		case GAME_CONFIG_QUIRKS_CUSTOM:
 			if(button_press & (1<<0x10)) {
 				if(game_config_index == 0) {
 					chip8_cfg->quirks = game_config_old_value;
-					game_config_selection = GAME_CONFIG_MAIN;
 					menu_display_update_required = true;
+					game_config_selection = GAME_CONFIG_MAIN;
 					break;
 				} else {
 					game_config_index--;
@@ -571,14 +565,14 @@ static void screen_game_config_handler(void) {
 			if(button_press & (1<<0x10)) {
 				if(game_config_index == 0) {
 					chip8_cfg->speed = game_config_old_value;
-					game_config_selection = GAME_CONFIG_MAIN;
 					menu_display_update_required = true;
+					game_config_selection = GAME_CONFIG_MAIN;
 				} else if(game_config_index == 1) {
 					chip8_cfg->speed = 0;
 					game_config_index--;
 					menu_display_update_required = true;
 				} else {
-					while(true); // Should never happen!
+					assert(false); // Should never happen!
 				}
 			}
 			for(uint32_t i=0; i<10; i++) {
@@ -589,8 +583,8 @@ static void screen_game_config_handler(void) {
 						menu_display_update_required = true;
 					} else if(game_config_index == 1) {
 						chip8_cfg->speed += i;
-						game_config_selection = GAME_CONFIG_MAIN;
 						menu_display_update_required = true;
+						game_config_selection = GAME_CONFIG_MAIN;
 						break;
 					}
 				}
@@ -603,15 +597,15 @@ static void screen_game_config_handler(void) {
 				file_io_result = bootrom_program(menu_current_dir, chip8_cfg);
 				directory_remove_filename(menu_current_dir);
 				if(file_io_result == FR_OK) {
+					menu_display_update_required = true;
 					game_config_selection = GAME_CONFIG_MAIN;
-					menu_display_update_required = true;
 				} else {
-					screen_state = SCREEN_ERROR;
 					menu_display_update_required = true;
+					screen_state = SCREEN_ERROR;
 				}
 			} else if(button_press & (1<<0x10)) {
-				game_config_selection = GAME_CONFIG_MAIN;
 				menu_display_update_required = true;
+				game_config_selection = GAME_CONFIG_MAIN;
 			}
 		break;
 	}
@@ -708,35 +702,35 @@ static void screen_global_config_handler(void) {
 	switch(global_config_selection) {
 		case GLOBAL_CONFIG_MAIN:
 			if(button_press & (1<<0xA)) { // The A button
-				global_config_selection = GLOBAL_CONFIG_VOLUME;
 				global_config_old_value = global_config.volume;
 				menu_display_update_required = true;
+				global_config_selection = GLOBAL_CONFIG_VOLUME;
 			} else if(button_press & (1<<0xB)) { // The B button
-				global_config_selection = GLOBAL_CONFIG_BACKLIGHT;
 				global_config_old_value = global_config.backlight;
 				menu_display_update_required = true;
+				global_config_selection = GLOBAL_CONFIG_BACKLIGHT;
 			} else if(button_press & (1<<0xC)) { // The C button
-				global_config_selection = GLOBAL_CONFIG_CONTRAST;
 				global_config_old_value = global_config.contrast;
 				menu_display_update_required = true;
+				global_config_selection = GLOBAL_CONFIG_CONTRAST;
 			} else if(button_press & (1<<0xD)) { // The D button
+				menu_display_update_required = true;
 				global_config_selection = GLOBAL_CONFIG_LANGUAGE;
-				menu_display_update_required = true;
 			} else if(button_press & (1<<0xE)) { // The E button
-				global_config_selection = GLOBAL_CONFIG_BOOT_ROM;
 				menu_display_update_required = true;
+				global_config_selection = GLOBAL_CONFIG_BOOT_ROM;
 			} else if(button_press & (1<<0xF)) { // The F button
 				config_save(&global_config);
-				screen_state = (file_io_result == FR_OK) ? SCREEN_MENU : SCREEN_ERROR; // If the user came from SCREEN_ERROR, file_io_result might not be FR_OK
 				menu_display_update_required = true;
+				screen_state = (file_io_result == FR_OK) ? SCREEN_MENU : SCREEN_ERROR; // If the user came from SCREEN_ERROR, file_io_result might not be FR_OK
 			} else if(button_press & (1<<0x10)) { // The X button
 				// Revert to original global config
 				memcpy(&global_config, &global_config_backup, sizeof(global_config));
 				// apply_volume(false); // No need to do that. Unlike brightness and contrast, this apply_volume() only need to run when sound is needed.
 				apply_brightness();
 				apply_contrast();
-				screen_state = (file_io_result == FR_OK) ? SCREEN_MENU : SCREEN_ERROR; // If the user came from SCREEN_ERROR, file_io_result might not be FR_OK
 				menu_display_update_required = true;
+				screen_state = (file_io_result == FR_OK) ? SCREEN_MENU : SCREEN_ERROR; // If the user came from SCREEN_ERROR, file_io_result might not be FR_OK
 			}
 		break;
 		// Shared by GLOBAL_CONFIG_VOLUME, GLOBAL_CONFIG_BACKLIGHT, GLOBAL_CONFIG_CONTRAST
@@ -755,14 +749,14 @@ static void screen_global_config_handler(void) {
 					menu_display_update_required = true; \
 				} \
 			} else if(button_press & (1<<0xF)) { \
-				global_config_selection = GLOBAL_CONFIG_MAIN; \
 				CONFIG_ADJUSTED_HANDLER(); \
 				menu_display_update_required = true; \
-			} else if(button_press & (1<<0x10)) { \
 				global_config_selection = GLOBAL_CONFIG_MAIN; \
+			} else if(button_press & (1<<0x10)) { \
 				FIELD = global_config_old_value; \
 				CONFIG_ADJUSTED_HANDLER(); \
 				menu_display_update_required = true; \
+				global_config_selection = GLOBAL_CONFIG_MAIN; \
 			}
 		case GLOBAL_CONFIG_VOLUME:
 			ADJUSTMENT_HANDLER(global_config.volume, apply_volume_with_feedback_sound);
@@ -784,21 +778,21 @@ static void screen_global_config_handler(void) {
 				} else if(button_press & (1<<0x4)) {
 					global_config.language = LANG_QSS;
 				}
-				global_config_selection = GAME_CONFIG_MAIN;
 				menu_display_update_required = true;
+				global_config_selection = GAME_CONFIG_MAIN;
 			} else if(button_press & (1<<0x10)) {
-				global_config_selection = GAME_CONFIG_MAIN;
 				menu_display_update_required = true;
+				global_config_selection = GAME_CONFIG_MAIN;
 			}
 		break;
 		case GLOBAL_CONFIG_BOOT_ROM:
 			if(button_press & (1<<0xF)) {
 				bootrom_erase(); // Assumed to be always successful
-				global_config_selection = GAME_CONFIG_MAIN;
 				menu_display_update_required = true;
+				global_config_selection = GAME_CONFIG_MAIN;
 			} else if(button_press & (1<<0x10)) {
-				global_config_selection = GAME_CONFIG_MAIN;
 				menu_display_update_required = true;
+				global_config_selection = GAME_CONFIG_MAIN;
 			}
 		break;
 	}
@@ -881,7 +875,7 @@ static void screen_global_config_handler(void) {
 static void screen_pre_gameplay_handler(void) {
 	uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
 	if(button_press & (1<<0x10)) {
-		menu_dir_reload_required = true;
+		menu_display_update_required = true;
 		screen_state = SCREEN_MENU;
 	} else if(button_press || systick_now - last_frame_processed_tick >= FUNCONF_SYSTEM_CORE_CLOCK/1000*GAMEPLAY_INSTRUCTION_DURATION_MS) {
 		get_rid_of_all_button_events();
@@ -984,11 +978,10 @@ static void screen_gameplay_handler(void) {
 				menu_cache_invalidated = true;
 			}
 
+			menu_display_update_required = true;
 			if(file_io_result != FR_OK) {
-				menu_display_update_required = true;
 				screen_state = SCREEN_ERROR;
 			} else if(user_exit) {
-				menu_dir_reload_required = true;
 				screen_state = SCREEN_MENU;
 			} else if (chip8.periph.requests & CHIP8_REQUEST_HALT_EXIT_EMULATOR) {
 				if(game_is_bootrom) {
@@ -996,17 +989,14 @@ static void screen_gameplay_handler(void) {
 					// because it takes a visible split-second to load the menu
 					draw_clear(chip8.periph.display);
 					lcd_transfer_begin(chip8.periph.display);
-					menu_dir_reload_required = true;
 					screen_state = SCREEN_MENU;
 				} else {
-					menu_display_update_required = true;
 					screen_state = SCREEN_GAMEOVER;
 				}
 			} else {
-				menu_display_update_required = true;
 				screen_state = SCREEN_GAME_CRASHED;
 			}
-			game_is_bootrom = false;
+			game_is_bootrom = false; // We're ending the game. Whichever next ROM being loaded won't be bootrom anymore.
 			return;
 		}
 		last_frame_processed_tick = systick_now;
@@ -1038,7 +1028,7 @@ static void screen_gameplay_handler(void) {
 static void screen_gameover_handler(void) {
 	uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
 	if(button_press & (1<<0x10)) {
-		menu_dir_reload_required = true;
+		menu_display_update_required = true;
 		screen_state = SCREEN_MENU;
 		return;
 	}
@@ -1055,7 +1045,7 @@ static void screen_gameover_handler(void) {
 static void screen_game_crashed_handler(void) {
 	uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
 	if(button_press & (1<<0x10)) {
-		menu_dir_reload_required = true;
+		menu_display_update_required = true;
 		screen_state = SCREEN_MENU;
 		return;
 	}
@@ -1111,7 +1101,7 @@ static void screen_game_crashed_handler(void) {
 static void screen_fw_update_ok_handler(void) {
 	uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
 	if(button_press & (1<<0x10)) {
-		menu_dir_reload_required = true;
+		menu_display_update_required = true;
 		screen_state = SCREEN_MENU;
 		return;
 	}
@@ -1167,11 +1157,10 @@ int main() {
 	// For SCREEN_MENU
 	menu_file_list = bulkmem->menu_file_list;
 	menu_current_dir[0] = '\0';
-	menu_cache_invalidated = true;
 	menu_offset = 0;
-	file_io_result = FR_OK;
 	menu_file_count_of_current_page = 0;
-	menu_dir_reload_required = true;
+	menu_cache_invalidated = true;
+	file_io_result = FR_OK;
 
 	// For SCREEN_GAME_CONFIG
 	game_config_selection = GAME_CONFIG_MAIN;
