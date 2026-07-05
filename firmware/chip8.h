@@ -74,7 +74,6 @@ enum chip8_input_layout {
 	CHIP8_LAYOUT_COUNT,
 };
 
-
 struct chip8_periph {
 	uint8_t delay_timer;
 	uint8_t sound_timer;
@@ -99,19 +98,30 @@ struct chip8_machine {
 #define CHIP8_CFG_VERSION (0) // Used only for boot ROM. For INI file, assume latest version
 
 struct chip8_config {
-	uint32_t version; // To update the struct, you can only append fields to the end and then increment the version
+	// To update the struct version, you can only append fields to the end and then increment the version
+	uint32_t version;
 	uint8_t font[16*5];
 	uint8_t font_highres[16*10];
 	uint8_t audio[CHIP8_AUDIO_BUFFER_SIZE];
 	uint8_t storage_flags[16];
 	uint32_t quirks;
 	uint8_t speed; // Unit: cycle per frame. fps is always 60 Hz.
-	uint8_t input_layout; // Datatype: enum chip8_input_layout. The keyboard layout. For documentation use. No actual function.
-	uint16_t input_navigation; // Buttons for navigation. For documentation use. No actual function.
-	uint16_t input_action; // Buttons for control. For documentation use. No actual function.
-	uint16_t input_replay; // Buttons for replay. For documentation use. No actual function.
+	uint8_t input_layout; // Datatype: enum chip8_input_layout. The keyboard layout. For showing on SCREEN_PRE_GAMEPLAY. No actual in-game function.
+	uint16_t input_navigation; // Buttons for navigation. For showing on SCREEN_PRE_GAMEPLAY. No actual in-game function.
+	uint16_t input_action; // Buttons for control. Ditto.
+	uint16_t input_replay; // Buttons for replay. Ditto.
 };
 
 void chip8_step(struct chip8_machine *machine);
 void chip8_timer_step(struct chip8_machine *machine);
 void chip8_init(struct chip8_machine *machine, const struct chip8_config *config);
+
+#define CHIP8_QUIRK_PLATFORM_VIP (CHIP8_QUIRK_VBLANK|CHIP8_QUIRK_LOGIC) // 0x00000060
+#define CHIP8_QUIRK_PLATFORM_SCHIP (CHIP8_QUIRK_SHIFT|CHIP8_QUIRK_MEMORY_LEAVE_I_UNCHANGED|CHIP8_QUIRK_JUMP|CHIP8_QUIRK_HIRES_COLLISION)  // 0x00000413
+#define CHIP8_QUIRK_PLATFORM_OCTO (CHIP8_QUIRK_WRAP|CHIP8_QUIRK_LORES_WIDE_SPRITE|CHIP8_QUIRK_RESIZE_CLEAR_SCREEN) // 0x00000888
+
+// 500Hz squarewave, pulse width: 8 samples, 50% duty cycle
+#define CHIP8_DEFAULT_AUDIO_SAMPLE {0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0}
+#define CHIP8_DEFAULT_AUDIO_PITCH (64U)
+
+extern const struct chip8_config CHIP8_CFG_DEFAULT;

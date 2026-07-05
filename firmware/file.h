@@ -37,15 +37,6 @@
 #define FR_BOOTROM_VERIFICATION_ERROR (94) // The bootrom verification had failed
 #define FR_LOW_BATTERY (95) // Low battery (<3000mV). The card is put into read-only mode.
 
-
-#define CHIP8_QUIRK_PLATFORM_VIP (CHIP8_QUIRK_VBLANK|CHIP8_QUIRK_LOGIC) // 0x00000060
-#define CHIP8_QUIRK_PLATFORM_SCHIP (CHIP8_QUIRK_SHIFT|CHIP8_QUIRK_MEMORY_LEAVE_I_UNCHANGED|CHIP8_QUIRK_JUMP|CHIP8_QUIRK_HIRES_COLLISION)  // 0x00000413
-#define CHIP8_QUIRK_PLATFORM_OCTO (CHIP8_QUIRK_WRAP|CHIP8_QUIRK_LORES_WIDE_SPRITE|CHIP8_QUIRK_RESIZE_CLEAR_SCREEN) // 0x00000888
-
-// 500Hz squarewave, pulse width: 8 samples, 50% duty cycle
-#define CHIP8_DEFAULT_AUDIO_SAMPLE {0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0}
-#define CHIP8_DEFAULT_AUDIO_PITCH (64U)
-
 void file_first_mount(void); // Process card insertion/removal events. Can be called after adc_is_reading_ready()
 void file_loop(void); // Process card insertion/removal events
 uint8_t file_load_config(const char *path, struct chip8_config *chip8_cfg);
