@@ -121,7 +121,7 @@ void chip8_init(struct chip8_machine *machine, const struct chip8_config *config
 #define CHIP8_QUIRK_PLATFORM_OCTO (CHIP8_QUIRK_WRAP|CHIP8_QUIRK_LORES_WIDE_SPRITE|CHIP8_QUIRK_RESIZE_CLEAR_SCREEN) // 0x00000888
 
 // 500Hz squarewave, pulse width: 8 samples, 50% duty cycle
-#define CHIP8_DEFAULT_AUDIO_SAMPLE {0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0}
+#define CHIP8_DEFAULT_AUDIO_SAMPLE ((uint8_t[CHIP8_AUDIO_BUFFER_SIZE]){0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0})
 #define CHIP8_DEFAULT_AUDIO_PITCH (64U)
 
 extern const struct chip8_config CHIP8_CFG_DEFAULT;

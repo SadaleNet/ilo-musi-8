@@ -203,18 +203,16 @@ static void get_rid_of_all_button_events(void) {
 	adc_button_get_just_released();
 }
 
-static void apply_volume(void) {
+static void apply_volume(bool with_sound) {
 	assert(global_config.volume < GLOBAL_CONFIG_MAX_VALUE);
 	static const uint8_t VOLUME_MAP[GLOBAL_CONFIG_MAX_VALUE] = {0, 1, 2, 4, 6, 8, 10, 12, 14, 15};
-	buzzer_set_volume(VOLUME_MAP[global_config.volume]);
+	buzzer_set_volume(with_sound ? VOLUME_MAP[global_config.volume] : 0);
 }
 
 static void apply_volume_with_feedback_sound(void) {
-	static const uint8_t FEEDBACK_AUDIO_SAMPLE[] = CHIP8_DEFAULT_AUDIO_SAMPLE;
-
 	buzzer_set_pitch(CHIP8_DEFAULT_AUDIO_PITCH);
-	buzzer_set_buffer(FEEDBACK_AUDIO_SAMPLE);
-	apply_volume();
+	buzzer_set_buffer(CHIP8_DEFAULT_AUDIO_SAMPLE);
+	apply_volume(true);
 	global_config_buzzer_start_tick = systick_now;
 }
 
@@ -733,7 +731,7 @@ static void screen_global_config_handler(void) {
 			} else if(button_press & (1<<0x10)) { // The X button
 				// Revert to original global config
 				memcpy(&global_config, &global_config_backup, sizeof(global_config));
-				apply_volume();
+				// apply_volume(false); // No need to do that. Unlike brightness and contrast, this apply_volume() only need to run when sound is needed.
 				apply_brightness();
 				apply_contrast();
 				screen_state = (file_io_result == FR_OK) ? SCREEN_MENU : SCREEN_ERROR; // If the user came from SCREEN_ERROR, file_io_result might not be FR_OK
@@ -805,15 +803,15 @@ static void screen_global_config_handler(void) {
 	}
 
 	if(screen_state != SCREEN_GLOBAL_CONFIG) {
-		// Always set volume back to zero before leaving the scene
+		// Always set mute before leaving the scene
 		// so that the buzzer won't be constantly on
-		buzzer_set_volume(0);
+		apply_volume(false);
 		return;
 	}
 
 	static const uint32_t FEEDBACK_AUDIO_DURATION = FUNCONF_SYSTEM_CORE_CLOCK*20/60; // 20 frames of feedback audio
 	if(systick_now-global_config_buzzer_start_tick >= FEEDBACK_AUDIO_DURATION) {
-		buzzer_set_volume(0);
+		apply_volume(false);
 	}
 
 	if(menu_display_update_required) {
@@ -960,7 +958,7 @@ static void screen_gameplay_handler(void) {
 			chip8.periph.key_just_released = (uint16_t)button_just_released;
 			if(!(chip8.periph.requests & CHIP8_REQUEST_WAIT_DISPLAY_REFRESH)) {
 				chip8_step(&chip8);
-				buzzer_set_volume(chip8.periph.sound_timer > 0 ? global_config.volume : 0);
+				apply_volume(chip8.periph.sound_timer > 0);
 				if(chip8.periph.requests & CHIP8_REQUEST_AUDIO_BUFFER_UPDATED) {
 					buzzer_set_buffer(chip8.periph.audio);
 					chip8.periph.requests &= ~CHIP8_REQUEST_AUDIO_BUFFER_UPDATED;
@@ -974,7 +972,7 @@ static void screen_gameplay_handler(void) {
 
 		bool user_exit = game_paused && (game_is_bootrom || systick_now-game_paused_start_tick >= FUNCONF_SYSTEM_CORE_CLOCK/1000*GAMEPLAY_EXIT_DURATION_MS);
 		if(user_exit || chip8.periph.requests & CHIP8_REQUEST_HALT_MASK) {
-			buzzer_set_volume(0);
+			apply_volume(false); // Must mute before exiting the game or the sound might never stop
 
 			if(memcmp(last_storage_flag, chip8.periph.storage_flags, sizeof(chip8.periph.storage_flags))) {
 				// Storage flag changed. Let's save it!
@@ -1016,9 +1014,9 @@ static void screen_gameplay_handler(void) {
 	if(systick_now - last_lcd_blit_tick >= FUNCONF_SYSTEM_CORE_CLOCK/60) { // 60fps
 		if(!game_paused) {
 			chip8_timer_step(&chip8);
-			buzzer_set_volume(chip8.periph.sound_timer > 0 ? global_config.volume : 0);
+			apply_volume(chip8.periph.sound_timer > 0);
 		} else {
-			buzzer_set_volume(0); // Do not play any sound when the game's paused
+			apply_volume(false); // Do not play any sound when the game's paused
 			// Display exit countdown
 			draw_clear_row(chip8.periph.display, GAMEPLAY_EXIT_BANNER_ROW_POS);
 			draw_clear_row(chip8.periph.display, GAMEPLAY_EXIT_BANNER_ROW_POS+1);
@@ -1151,7 +1149,7 @@ int main() {
 	lcd_init_second_stage(); // If card's inserted, must be done after spi_card_mount_filesystem()
 
 	config_load(&global_config);
-	buzzer_set_volume(0); // Always use buzzer volume of 0 at the beginning
+	apply_volume(false); // Always use mute the buzzer at the beginning
 	apply_brightness();
 	apply_contrast();
 
