@@ -50,7 +50,7 @@
 #define GAMEPLAY_INSTRUCTION_DURATION_MS (5000U) // Show gameplay instruction for this long
 #define GAMEPLAY_EXIT_DURATION_MS (3000U) // Tell the user to hold <X> for this long to exit the game
 #define GAMEPLAY_EXIT_BANNER_ROW_POS (3) // The row position of the EXIT banner for warning the user about the exit
-#define GAMEPLAY_EXIT_BANNER_ROW_HEIGHT (2) // How tall the EXIT banner are. Each row is 8px.
+#define GAMEPLAY_EXIT_BANNER_ROW_HEIGHT (2) // How tall the confirm game quit banner is. Each row is 8px.
 
 extern const uint8_t ICON_NAVIGATION[];
 extern const size_t ICON_NAVIGATION_LENGTH;
@@ -105,7 +105,7 @@ static uint32_t chip8_keymap(uint32_t button_state) {
 	// [12] [13] [14] [15]        [A] [0] [B] [F]
 	uint32_t ret = 0;
 	const unsigned int BUTTON_MAP[] = {13, 0, 1, 2, 4, 5, 6, 8, 9, 10,
-		12, 14, 3, 7, 11, 15, 16};
+										12, 14, 3, 7, 11, 15, 16};
 	for(int i=0; i<sizeof(BUTTON_MAP)/sizeof(*BUTTON_MAP); i++) {
 		if(button_state & (1<<BUTTON_MAP[i])) {
 			ret |= 1<<i;
@@ -189,10 +189,10 @@ bool game_is_bootrom;
 uint32_t game_paused_start_tick; // After pausing for long enough (i.e. holding X for long enough), the game would be quit.
 uint8_t (*game_paused_screen_buffer_backup)[DISPLAY_WIDTH]; // The pause message overlays on the game's display. Need to restore upon unpause.
 
-static void get_rid_of_all_button_events(void) {
+static void wait_button_release(void) {
 	// Clean screen reasons:
 	// 1. We wait until release of all buttons.
-	// In case a button got held, the screen content won't get shown.
+	// In case a button got held, the old screen content would get shown.
 	// 2. For SCREEN_PRE_GAMEPLAY, we stole the display buffer for showing the controls
 	// so we also must clean it up before running the CHIP-8 emulator
 	draw_clear(chip8.periph.display);
@@ -381,7 +381,7 @@ static void screen_menu_handler(void) {
 							screen_state = SCREEN_PRE_GAMEPLAY;
 						} else {
 							// If the input buttons haven't been specified in the config file, just run the game!
-							get_rid_of_all_button_events();
+							wait_button_release();
 							screen_state = SCREEN_GAMEPLAY;
 						}
 					} else {
@@ -438,7 +438,7 @@ static void screen_menu_handler(void) {
 				break; // Skip to error handling mechanism
 			}
 		}
-		// Get rid of all button press events after long operation
+		// Get rid of all button press events after potentially long operation
 		adc_button_get_just_pressed();
 	}
 
@@ -599,10 +599,19 @@ static void screen_game_config_handler(void) {
 		break;
 		case GAME_CONFIG_BOOT_ROM:
 			if(button_press & (1<<0xF)) {
+				// Remove the cancel option from the list for visual feedback of potentially long operation
+				draw_clear_row(chip8.periph.display, 7);
+				lcd_transfer_begin(chip8.periph.display);
+
+				// Flash the bootrom
 				memset(chip8_cfg->storage_flags, 0, sizeof(chip8_cfg->storage_flags)); // Never save the storage flag into the bootrom
 				directory_attach_filename(menu_current_dir, MENU_SELECTED_FILENAME);
 				file_io_result = bootrom_program(menu_current_dir, chip8_cfg);
 				directory_remove_filename(menu_current_dir);
+
+				// Get rid of all button press events after potentially long operation
+				adc_button_get_just_pressed();
+
 				if(file_io_result == FR_OK) {
 					menu_display_update_required = true;
 					game_config_selection = GAME_CONFIG_MAIN;
@@ -886,7 +895,7 @@ static void screen_pre_gameplay_handler(void) {
 		menu_display_update_required = true;
 		screen_state = SCREEN_MENU;
 	} else if(button_press || systick_now - last_frame_processed_tick >= FUNCONF_SYSTEM_CORE_CLOCK/1000*GAMEPLAY_INSTRUCTION_DURATION_MS) {
-		get_rid_of_all_button_events();
+		wait_button_release();
 		screen_state = SCREEN_GAMEPLAY;
 	}
 	if(screen_state != SCREEN_PRE_GAMEPLAY) {
@@ -1044,7 +1053,7 @@ static void screen_gameover_handler(void) {
 	if(menu_display_update_required) {
 		draw_clear(chip8.periph.display);
 		draw_text(chip8.periph.display, "GAME OVER", 37, 24);
-		draw_text(chip8.periph.display, "PRESS <X> TO EXIT", 13, 34);
+		draw_text(chip8.periph.display, "PRESS <X> TO QUIT", 13, 34);
 		lcd_transfer_begin(chip8.periph.display);
 		menu_display_update_required = false;
 	}
