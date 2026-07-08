@@ -32,6 +32,7 @@
 
 #include "crc.h"
 #include "util.h"
+#include "generated.h"
 
 #include "ff.h"		/* Obtains integer types for FatFs */
 #include "diskio.h"	/* Common include file for FatFs and disk I/O layer */

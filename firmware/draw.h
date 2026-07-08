@@ -24,6 +24,8 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include "config.h"
+#include "generated.h"
 #include <stdint.h>
 
 void draw_clear(uint8_t *buffer);
@@ -31,3 +33,6 @@ void draw_transfer_row(uint8_t *buffer, uint8_t *bitmap, uint8_t row); // Copy b
 void draw_clear_row(uint8_t *buffer, uint8_t row);
 void draw_bitmap_h8(uint8_t *buffer, const uint8_t *bitmap, uint8_t w, uint8_t x, uint8_t y); // height is always 8. Does not support negative x y because it isn't needed.
 void draw_text(uint8_t *buffer, const char *text, uint8_t x, uint8_t y);
+
+uint8_t draw_get_translated_width(enum config_lang lang, enum tr_msg_id msg_id);
+void draw_translated(uint8_t *buffer, enum config_lang lang, enum tr_msg_id msg_id, uint8_t x, uint8_t y);

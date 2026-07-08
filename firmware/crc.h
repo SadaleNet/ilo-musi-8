@@ -30,7 +30,3 @@
 uint8_t crc7_compute(const uint8_t table[256], uint8_t crc, const uint8_t *payload, size_t length);
 uint16_t crc16_compute(const uint16_t table[256], uint16_t crc, const uint8_t *payload, size_t length);
 uint32_t crc32_compute(const uint32_t table[256], uint32_t crc, const uint8_t *payload, size_t length);
-
-extern const uint8_t CRC7_TABLE[256];
-extern const uint16_t CRC16_TABLE[256];
-extern const uint32_t CRC32_TABLE[256];

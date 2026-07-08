@@ -65,13 +65,20 @@ def compute_crc_by_table(table, bitwidth, crc, payload):
 		crc &= mask
 	return crc
 
+def get_crc_declarations():
+	ret = ""
+	ret += f"extern const uint8_t CRC7_TABLE[256];\n"
+	ret += f"extern const uint16_t CRC16_TABLE[256];\n"
+	ret += f"extern const uint32_t CRC32_TABLE[256];\n"
+	return ret
 
-def print_crc_tables():
+def get_crc_tables():
 	CRC7_TABLE = [compute_crc_single(0x89, 7, i) for i in range(256)]
 	CRC16_TABLE = [compute_crc_single(0x1021, 16, i) for i in range(256)]
 	CRC32_TABLE = [compute_crc_single(0x04C11DB7, 32, i) for i in range(256)]
 
-	print(f"const uint8_t CRC7_TABLE[] = {{ // Polynomial 0x89\n{to_c_array(CRC7_TABLE)} }};")
-	print(f"const uint16_t CRC16_TABLE[] = {{ // Polynomial 0x1021\n{to_c_array(CRC16_TABLE, 4)} }};")
-	print(f"const uint32_t CRC32_TABLE[] = {{ // Polynomial 0x04C11DB7\n{to_c_array(CRC32_TABLE, 8, 8)} }};")
-	print("")
+	ret = ""
+	ret += f"const uint8_t CRC7_TABLE[] = {{ // Polynomial 0x89\n{to_c_array(CRC7_TABLE)} }};\n"
+	ret += f"const uint16_t CRC16_TABLE[] = {{ // Polynomial 0x1021\n{to_c_array(CRC16_TABLE, 4)} }};\n"
+	ret += f"const uint32_t CRC32_TABLE[] = {{ // Polynomial 0x04C11DB7\n{to_c_array(CRC32_TABLE, 8, 8)} }};\n"
+	return ret

@@ -549,11 +549,11 @@ _____
 ''',
 'a':
 '''
-_XXX_
-____X
+_____
 _XXXX
 X___X
-_XXXX
+X__XX
+_XX_X
 ''',
 'b':
 '''
@@ -647,7 +647,7 @@ _XXX_
 '''
 _____
 _____
-_X_X_
+XX_X_
 X_X_X
 X___X
 ''',
@@ -863,18 +863,27 @@ __X____
 ''',
 }
 
-def print_font_and_icon_tables():
-	print("const uint8_t FONT_ASCII[0x5F][5] = {")
+def get_font_and_icon_declarations():
+	ret = ""
+	ret += "extern const uint8_t FONT_ASCII[0x5F][5]; // Font with definition between 0x20 (space) and 0x7E (tilde)\n"
+	for k, v in BITMAP_ICONS.items():
+		bitmap = bitmap_to_bytes(v)
+		ret += f"extern const uint8_t ICON_{k}[];\n"
+		ret += f"extern const size_t ICON_{k}_LENGTH;\n"
+	return ret
+
+def get_font_and_icon_tables():
+	ret = ""
+	ret += "const uint8_t FONT_ASCII[0x5F][5] = {\n"
 
 	for i in range(0x20, 0x7F):
 		c = chr(i)
-		print(f"\t{{{to_c_array(bitmap_to_bytes(BITMAP[c]))} }}, // {c.replace('\\', '(backslash)')}")
+		ret += f"\t{{{to_c_array(bitmap_to_bytes(BITMAP[c]))} }}, // {c.replace('\\', '(backslash)')}\n"
 
-	print("};")
-	print("")
+	ret += "};\n"
 
 	for k, v in BITMAP_ICONS.items():
 		bitmap = bitmap_to_bytes(v)
-		print(f"const uint8_t ICON_{k}[] = {{{to_c_array(bitmap)} }};")
-		print(f"const size_t ICON_{k}_LENGTH = {len(bitmap)};")
-	print("")
+		ret += f"const uint8_t ICON_{k}[] = {{{to_c_array(bitmap)} }};\n"
+		ret += f"const size_t ICON_{k}_LENGTH = {len(bitmap)};\n"
+	return ret

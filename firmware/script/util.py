@@ -34,7 +34,7 @@ def bitmap_to_bytes(bitmap):
 	lines = [i.replace('\n', '') for i in bitmap.split('\n')[1:][:-1]] # remove the first and the final \n
 	width = len(lines[0])
 	ret = [0 for i in range(width)]
-	assert(len(lines) < 8) # This function doesn't support image taller than 8px
+	assert(len(lines) <= 8) # This function doesn't support image taller than 8px
 	# Column major. The top bit is LSB.
 	for c in range(width):
 		for r in range(len(lines)):

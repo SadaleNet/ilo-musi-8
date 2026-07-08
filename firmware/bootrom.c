@@ -28,6 +28,7 @@
 #include "crc.h"
 #include "file.h"
 #include "flash.h"
+#include "generated.h"
 #include "fatfs/ff.h"
 
 #include <stddef.h>

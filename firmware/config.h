@@ -29,7 +29,7 @@
 #define GLOBAL_CONFIG_VERSION (0)
 #define GLOBAL_CONFIG_MAX_VALUE (10) // Exclusive. Valid value is between 0~MAX_VALUE-1. Shared by volume, backlight and contrast
 
-enum CONFIG_LANG {
+enum config_lang {
 	LANG_EN,
 	LANG_TOK,
 	LANG_SP,

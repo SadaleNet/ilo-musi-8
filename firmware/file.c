@@ -30,6 +30,7 @@
 #include "crc.h"
 #include "file.h"
 #include "flash.h"
+#include "generated.h"
 #include "lcd.h"
 #include "spi.h"
 #include "util.h"

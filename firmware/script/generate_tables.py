@@ -26,13 +26,28 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from crc import print_crc_tables
-from font import print_font_and_icon_tables
+from crc import get_crc_declarations, get_crc_tables
+from font import get_font_and_icon_declarations, get_font_and_icon_tables
+from translation import get_translation_declarations, get_translation_tables
+import os
+import sys
+
+def get_header():
+	ret = ""
+	ret += "// This file was generated with generate_tables.py. Do not manually modify or it'll be overwritten.\n"
+	ret += "#include <stdint.h>\n"
+	ret += "#include <stddef.h>\n"
+	return ret
 
 if __name__ == "__main__":
-	print("// This file was generated with generate_tables.py. Do not manually modify or it'll be overwritten.")
-	print("#include <stdint.h>")
-	print("#include <stddef.h>")
+	if len(sys.argv) < 2:
+		print(f"Usage: {sys.argv[0]} <output-dir> #generates generated.h and generated.c")
+		exit(1)
 
-	print_font_and_icon_tables()
-	print_crc_tables()
+	base_dir = sys.argv[1]
+
+	with open(os.path.join(base_dir, "generated.h"), "w") as f:
+		f.write('\n'.join([get_header(), get_crc_declarations(), get_font_and_icon_declarations(), get_translation_declarations()]))
+
+	with open(os.path.join(base_dir, "generated.c"), "w") as f:
+		f.write('\n'.join([get_header(), get_crc_tables(), get_font_and_icon_tables(), get_translation_tables()]))

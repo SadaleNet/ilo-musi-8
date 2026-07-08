@@ -34,6 +34,7 @@
 #include "draw.h"
 #include "file.h"
 #include "flash.h"
+#include "generated.h"
 #include "lcd.h"
 #include "spi.h"
 #include "tim1_pwm.h"
@@ -51,21 +52,6 @@
 #define GAMEPLAY_EXIT_DURATION_MS (3000U) // Tell the user to hold <X> for this long to exit the game
 #define GAMEPLAY_EXIT_BANNER_ROW_POS (3) // The row position of the EXIT banner for warning the user about the exit
 #define GAMEPLAY_EXIT_BANNER_ROW_HEIGHT (2) // How tall the confirm game quit banner is. Each row is 8px.
-
-extern const uint8_t ICON_NAVIGATION[];
-extern const size_t ICON_NAVIGATION_LENGTH;
-extern const uint8_t ICON_GAMECONF[];
-extern const size_t ICON_GAMECONF_LENGTH;
-extern const uint8_t ICON_GLOBALCONF[];
-extern const size_t ICON_GLOBALCONF_LENGTH;
-extern const uint8_t ICON_PLAY[];
-extern const size_t ICON_PLAY_LENGTH;
-extern const uint8_t ICON_UPDIR[];
-extern const size_t ICON_UPDIR_LENGTH;
-extern const uint8_t ICON_ACTION[];
-extern const size_t ICON_ACTION_LENGTH;
-extern const uint8_t ICON_REPLAY[];
-extern const size_t ICON_REPLAY_LENGTH;
 
 enum screen_state {
 	SCREEN_ERROR, // File IO Error Screen
@@ -828,11 +814,19 @@ static void screen_global_config_handler(void) {
 	if(menu_display_update_required) {
 		draw_clear(chip8.periph.display);
 
-		draw_text(chip8.periph.display, "VOLUME............", 12, 0);
-		draw_text(chip8.periph.display, "BACKLIGHT.........", 12, 9);
-		draw_text(chip8.periph.display, "CONTRAST..........", 12, 18);
-		draw_text(chip8.periph.display, "LANGUAGE........", 12, 27);
-		draw_text(chip8.periph.display, "CLEAR BOOTROM", 12, 36);
+		draw_translated(chip8.periph.display, global_config.language, TR_MSG_GC_VOLUME, 12, 0);
+		uint8_t width = draw_get_translated_width(global_config.language, TR_MSG_GC_VOLUME);
+		char str[22];
+		uint8_t letters = (width+5)/6;
+		memset(str, '.', 18-letters);
+		str[18-letters] = '\0';
+		draw_text(chip8.periph.display, str, 12+letters*6, 0);
+
+		//draw_text(chip8.periph.display, "..................", 12, 0);
+		draw_text(chip8.periph.display, "BACKLIGHT.........", 12, 10);
+		draw_text(chip8.periph.display, "CONTRAST..........", 12, 19);
+		draw_text(chip8.periph.display, "LANGUAGE........", 12, 28);
+		draw_text(chip8.periph.display, "CLEAR BOOTROM", 12, 37);
 
 		char value_str[2];
 		value_str[1] = '\0';
@@ -852,13 +846,13 @@ static void screen_global_config_handler(void) {
 
 		switch(global_config_selection) {
 			case GLOBAL_CONFIG_MAIN:
-				draw_text(chip8.periph.display, "A)", 0, 0);
-				draw_text(chip8.periph.display, "B)", 0, 9);
-				draw_text(chip8.periph.display, "C)", 0, 18);
-				draw_text(chip8.periph.display, "D)", 0, 27);
-				draw_text(chip8.periph.display, "E)", 0, 36);
-				draw_text(chip8.periph.display, "F)SAVE", 0, 47);
-				draw_text(chip8.periph.display, "X)CANCEL", 0, 56);
+				draw_text(chip8.periph.display, "A)", 0, 1);
+				draw_text(chip8.periph.display, "B)", 0, 10);
+				draw_text(chip8.periph.display, "C)", 0, 19);
+				draw_text(chip8.periph.display, "D)", 0, 28);
+				draw_text(chip8.periph.display, "E)", 0, 37);
+				draw_text(chip8.periph.display, "F)SAVE", 0, 48);
+				draw_text(chip8.periph.display, "X)CANCEL", 0, 57);
 				draw_text(chip8.periph.display, FIRMWARE_VERSION, DISPLAY_WIDTH-strlen(FIRMWARE_VERSION)*6, 58);
 			break;
 			case GLOBAL_CONFIG_VOLUME:

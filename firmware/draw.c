@@ -25,6 +25,9 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include "lcd.h" // for DISPLAY_WIDTH and DISPLAY_HEIGHT
+#include "config.h" // for enum config_lang
+#include "generated.h" // for font and enum tr_msg_id
+#include <assert.h>
 #include <string.h>
 
 void draw_clear(uint8_t *buffer) {
@@ -55,7 +58,6 @@ void draw_bitmap_h8(uint8_t *buffer, const uint8_t *bitmap, uint8_t w, uint8_t x
 }
 
 void draw_text(uint8_t *buffer, const char *text, uint8_t x, uint8_t y) {
-	extern const uint8_t FONT_ASCII[0x5F][5]; // Font with definition between 0x20 (space) and 0x7E (tilde)
 	const char *ptr = text;
 	while(*ptr && x < DISPLAY_WIDTH) {
 		size_t index = *ptr - ' ';
@@ -64,5 +66,26 @@ void draw_text(uint8_t *buffer, const char *text, uint8_t x, uint8_t y) {
 		}
 		draw_bitmap_h8(buffer, FONT_ASCII[index], sizeof(*FONT_ASCII), x, y);
 		x += sizeof(*FONT_ASCII)+1; ptr++;
+	}
+}
+
+
+uint8_t draw_get_translated_width(enum config_lang lang, enum tr_msg_id msg_id) {
+	switch(lang) {
+		case LANG_EN: return strlen(TR_MSG_EN[msg_id])*6;
+		case LANG_TOK: return strlen(TR_MSG_TOK[msg_id])*6;
+		case LANG_SP: return TR_MSG_SP_LEN[msg_id];
+		case LANG_QSS: return TR_MSG_QSS_LEN[msg_id];
+		default: assert(false);
+	}
+}
+
+void draw_translated(uint8_t *buffer, enum config_lang lang, enum tr_msg_id msg_id, uint8_t x, uint8_t y) {
+	switch(lang) {
+		case LANG_EN: draw_text(buffer, TR_MSG_EN[msg_id], x, y+1); break;
+		case LANG_TOK: draw_text(buffer, TR_MSG_TOK[msg_id], x, y+1); break;
+		case LANG_SP: draw_bitmap_h8(buffer, TR_MSG_SP[msg_id], TR_MSG_SP_LEN[msg_id], x, y); break;
+		case LANG_QSS: draw_bitmap_h8(buffer, TR_MSG_QSS[msg_id], TR_MSG_QSS_LEN[msg_id], x, y); break;
+		default: assert(false);
 	}
 }
