@@ -453,17 +453,17 @@ static void screen_menu_handler(void) {
 		}
 		// Draw legend
 		draw_text(chip8.periph.display, "2468", 96, 24+1);
-		draw_bitmap_h8(chip8.periph.display, ICON_NAVIGATION, ICON_NAVIGATION_LENGTH, 120, 24);
+		draw_bitmap_h8(chip8.periph.display, ICON_NAVIGATION, ICON_NAVIGATION_LEN, 120, 24);
 		if(screen_menu_selected_item_is_a_file()) {
 			draw_text(chip8.periph.display, "C", 114, 32+1);
-			draw_bitmap_h8(chip8.periph.display, ICON_GAMECONF, ICON_GAMECONF_LENGTH, 120, 32);
+			draw_bitmap_h8(chip8.periph.display, ICON_GAMECONF, ICON_GAMECONF_LEN, 120, 32);
 		}
 		draw_text(chip8.periph.display, "D", 114, 40+1);
-		draw_bitmap_h8(chip8.periph.display, ICON_GLOBALCONF, ICON_GLOBALCONF_LENGTH, 120, 40);
+		draw_bitmap_h8(chip8.periph.display, ICON_GLOBALCONF, ICON_GLOBALCONF_LEN, 120, 40);
 		draw_text(chip8.periph.display, "F", 114, 48+1);
-		draw_bitmap_h8(chip8.periph.display, ICON_PLAY, ICON_PLAY_LENGTH, 120, 48);
+		draw_bitmap_h8(chip8.periph.display, ICON_PLAY, ICON_PLAY_LEN, 120, 48);
 		draw_text(chip8.periph.display, "X", 114, 56+1);
-		draw_bitmap_h8(chip8.periph.display, ICON_UPDIR, ICON_UPDIR_LENGTH, 120, 56);
+		draw_bitmap_h8(chip8.periph.display, ICON_UPDIR, ICON_UPDIR_LEN, 120, 56);
 		lcd_transfer_begin(chip8.periph.display);
 		menu_display_update_required = false;
 	}
@@ -699,6 +699,16 @@ static void screen_game_config_handler(void) {
 	}
 }
 
+static void draw_message_with_dots_suffix(enum tr_msg_id msg_id, uint8_t max_dots, uint8_t x, uint8_t y) {
+	draw_translated(chip8.periph.display, global_config.language, msg_id, x, y);
+	uint8_t width = draw_get_translated_width(global_config.language, msg_id);
+	char str[22];
+	uint8_t prefix_letters = (width+5)/6;
+	memset(str, '.', max_dots-prefix_letters);
+	str[max_dots-prefix_letters] = '\0';
+	draw_text(chip8.periph.display, str, 12+prefix_letters*6, y+Y_ADJ);
+}
+
 static void screen_global_config_handler(void) {
 	uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
 	switch(global_config_selection) {
@@ -814,68 +824,73 @@ static void screen_global_config_handler(void) {
 	if(menu_display_update_required) {
 		draw_clear(chip8.periph.display);
 
-		draw_translated(chip8.periph.display, global_config.language, TR_MSG_GC_VOLUME, 12, 0);
-		uint8_t width = draw_get_translated_width(global_config.language, TR_MSG_GC_VOLUME);
-		char str[22];
-		uint8_t letters = (width+5)/6;
-		memset(str, '.', 18-letters);
-		str[18-letters] = '\0';
-		draw_text(chip8.periph.display, str, 12+letters*6, 0);
-
-		//draw_text(chip8.periph.display, "..................", 12, 0);
-		draw_text(chip8.periph.display, "BACKLIGHT.........", 12, 10);
-		draw_text(chip8.periph.display, "CONTRAST..........", 12, 19);
-		draw_text(chip8.periph.display, "LANGUAGE........", 12, 28);
-		draw_text(chip8.periph.display, "CLEAR BOOTROM", 12, 37);
+		draw_message_with_dots_suffix(TR_MSG_GC_VOLUME, 18, 12, 0);
+		draw_message_with_dots_suffix(TR_MSG_GC_BACKLIGHT, 18, 12, 9);
+		draw_message_with_dots_suffix(TR_MSG_GC_CONTRAST, 18, 12, 18);
+		draw_message_with_dots_suffix(TR_MSG_GC_LANG, 16, 12, 27);
+		draw_translated(chip8.periph.display, global_config.language, TR_MSG_GC_CLR_BOOTROM, 12, 36);
 
 		char value_str[2];
 		value_str[1] = '\0';
 		value_str[0] = (global_config.volume%10) + '0';
-		draw_text(chip8.periph.display, value_str, 120, 0);
+		draw_text(chip8.periph.display, value_str, 120, 0+Y_ADJ);
 		value_str[0] = (global_config.backlight%10) + '0';
-		draw_text(chip8.periph.display, value_str, 120, 9);
+		draw_text(chip8.periph.display, value_str, 120, 9+Y_ADJ);
 		value_str[0] = (global_config.contrast%10) + '0';
-		draw_text(chip8.periph.display, value_str, 120, 18);
+		draw_text(chip8.periph.display, value_str, 120, 18+Y_ADJ);
 		switch(global_config.language) {
-			case LANG_EN: draw_text(chip8.periph.display, ".EN", 110, 27); break;
-			case LANG_TOK: draw_text(chip8.periph.display, "TOK", 110, 27); break;
-			case LANG_SP: draw_text(chip8.periph.display, ".SP", 110, 27); break;
-			case LANG_QSS: draw_text(chip8.periph.display, "QSS", 110, 27); break;
+			case LANG_EN: draw_text(chip8.periph.display, ".EN", 108, 27+Y_ADJ); break;
+			case LANG_TOK: draw_text(chip8.periph.display, "TOK", 108+1, 27+Y_ADJ); break;
+			case LANG_SP: draw_bitmap_h8(chip8.periph.display, ICON_LANG_SP, ICON_LANG_SP_LEN, 108, 27+Y_ADJ_SP); break;
+			case LANG_QSS: draw_bitmap_h8(chip8.periph.display, ICON_LANG_QSS, ICON_LANG_QSS_LEN, 108+1, 27); break;
 			break;
 		}
 
 		switch(global_config_selection) {
 			case GLOBAL_CONFIG_MAIN:
-				draw_text(chip8.periph.display, "A)", 0, 1);
-				draw_text(chip8.periph.display, "B)", 0, 10);
-				draw_text(chip8.periph.display, "C)", 0, 19);
-				draw_text(chip8.periph.display, "D)", 0, 28);
-				draw_text(chip8.periph.display, "E)", 0, 37);
-				draw_text(chip8.periph.display, "F)SAVE", 0, 48);
-				draw_text(chip8.periph.display, "X)CANCEL", 0, 57);
+				draw_text(chip8.periph.display, "A)", 0, 0+Y_ADJ);
+				draw_text(chip8.periph.display, "B)", 0, 9+Y_ADJ);
+				draw_text(chip8.periph.display, "C)", 0, 18+Y_ADJ);
+				draw_text(chip8.periph.display, "D)", 0, 27+Y_ADJ);
+				draw_text(chip8.periph.display, "E)", 0, 36+Y_ADJ);
+				draw_text(chip8.periph.display, "F)", 0, 47+Y_ADJ);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_SAVE, 12, 47);
+				draw_text(chip8.periph.display, "X)", 0, 56+Y_ADJ);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_CANCEL, 12, 56);
 				draw_text(chip8.periph.display, FIRMWARE_VERSION, DISPLAY_WIDTH-strlen(FIRMWARE_VERSION)*6, 58);
 			break;
 			case GLOBAL_CONFIG_VOLUME:
 			case GLOBAL_CONFIG_BACKLIGHT:
 			case GLOBAL_CONFIG_CONTRAST:
 				switch(global_config_selection) {
-					case GLOBAL_CONFIG_VOLUME: draw_text(chip8.periph.display, "=>", 0, 0); break;
-					case GLOBAL_CONFIG_BACKLIGHT: draw_text(chip8.periph.display, "=>", 0, 9); break;
-					case GLOBAL_CONFIG_CONTRAST: draw_text(chip8.periph.display, "=>", 0, 18); break;
+					case GLOBAL_CONFIG_VOLUME: draw_text(chip8.periph.display, "=>", 0, 0+Y_ADJ); break;
+					case GLOBAL_CONFIG_BACKLIGHT: draw_text(chip8.periph.display, "=>", 0, 9+Y_ADJ); break;
+					case GLOBAL_CONFIG_CONTRAST: draw_text(chip8.periph.display, "=>", 0, 18+Y_ADJ); break;
 					default: assert(false); break; // Should never happen!
 				}
-				draw_text(chip8.periph.display, "4)LESS 6)MORE", 0, 47);
-				draw_text(chip8.periph.display, "F)SAVE X)CANCEL", 0, 56);
+				draw_text(chip8.periph.display, "4)     6)", 0, 47+Y_ADJ);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_ADJ_LESS, 12, 47);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_ADJ_MORE, 54, 47);
+				draw_text(chip8.periph.display, "F)     X)", 0, 56+Y_ADJ);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_SAVE, 12, 56);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_CANCEL, 54, 56);
 			break;
 			case GLOBAL_CONFIG_LANGUAGE:
-				draw_text(chip8.periph.display, "=>", 0, 27);
-				draw_text(chip8.periph.display, "1)EN 2)TOK 3)SP", 0, 47);
-				draw_text(chip8.periph.display, "4)QSS X)CANCEL", 0, 56);
+				draw_text(chip8.periph.display, "=>", 0, 27+Y_ADJ);
+				draw_text(chip8.periph.display, "1)EN 2)TOK 3)", 0, 47+Y_ADJ);
+				draw_bitmap_h8(chip8.periph.display, ICON_LANG_SP, ICON_LANG_SP_LEN, 78, 47+Y_ADJ_SP);
+
+				draw_text(chip8.periph.display, "4)", 0, 56+Y_ADJ);
+				draw_bitmap_h8(chip8.periph.display, ICON_LANG_QSS, ICON_LANG_QSS_LEN, 12, 56);
+				draw_text(chip8.periph.display, "X)", 36, 56+Y_ADJ);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_CANCEL, 48, 56);
 			break;
 			case GLOBAL_CONFIG_BOOT_ROM:
-				draw_text(chip8.periph.display, "=>", 0, 36);
-				draw_text(chip8.periph.display, "F)CONFIRM CLEAR", 0, 47);
-				draw_text(chip8.periph.display, "X)CANCEL", 0, 56);
+				draw_text(chip8.periph.display, "=>", 0, 36+Y_ADJ);
+				draw_text(chip8.periph.display, "F)", 0, 47+Y_ADJ);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_GC_CONFIRM_CLR_BOOTROM, 12, 47);
+				draw_text(chip8.periph.display, "X)", 0, 56+Y_ADJ);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_CANCEL, 12, 56);
 			break;
 		}
 		lcd_transfer_begin(chip8.periph.display);
@@ -902,21 +917,21 @@ static void screen_pre_gameplay_handler(void) {
 		char button_str[17];
 		if(chip8_cfg->input_navigation) {
 			util_print_button_buffer(button_str, chip8_cfg->input_navigation);
-			uint8_t x = DISPLAY_WIDTH/2-(ICON_NAVIGATION_LENGTH+1+6*strlen(button_str))/2;
-			draw_bitmap_h8(chip8.periph.display, ICON_NAVIGATION, ICON_NAVIGATION_LENGTH, x, 10);
-			draw_text(chip8.periph.display, button_str, x+ICON_NAVIGATION_LENGTH+1, 11);
+			uint8_t x = DISPLAY_WIDTH/2-(ICON_NAVIGATION_LEN+1+6*strlen(button_str))/2;
+			draw_bitmap_h8(chip8.periph.display, ICON_NAVIGATION, ICON_NAVIGATION_LEN, x, 10);
+			draw_text(chip8.periph.display, button_str, x+ICON_NAVIGATION_LEN+1, 11);
 		}
 		if(chip8_cfg->input_action) {
 			util_print_button_buffer(button_str, chip8_cfg->input_action);
-			uint8_t x = DISPLAY_WIDTH/2-(ICON_ACTION_LENGTH+1+6*strlen(button_str))/2;
-			draw_bitmap_h8(chip8.periph.display, ICON_ACTION, ICON_ACTION_LENGTH, x, 20);
-			draw_text(chip8.periph.display, button_str, x+ICON_ACTION_LENGTH+1, 21);
+			uint8_t x = DISPLAY_WIDTH/2-(ICON_ACTION_LEN+1+6*strlen(button_str))/2;
+			draw_bitmap_h8(chip8.periph.display, ICON_ACTION, ICON_ACTION_LEN, x, 20);
+			draw_text(chip8.periph.display, button_str, x+ICON_ACTION_LEN+1, 21);
 		}
 		if(chip8_cfg->input_replay) {
 			util_print_button_buffer(button_str, chip8_cfg->input_replay);
-			uint8_t x = DISPLAY_WIDTH/2-(ICON_REPLAY_LENGTH+1+6*strlen(button_str))/2;
-			draw_bitmap_h8(chip8.periph.display, ICON_REPLAY, ICON_REPLAY_LENGTH, x, 30);
-			draw_text(chip8.periph.display, button_str, x+ICON_REPLAY_LENGTH+1, 31);
+			uint8_t x = DISPLAY_WIDTH/2-(ICON_REPLAY_LEN+1+6*strlen(button_str))/2;
+			draw_bitmap_h8(chip8.periph.display, ICON_REPLAY, ICON_REPLAY_LEN, x, 30);
+			draw_text(chip8.periph.display, button_str, x+ICON_REPLAY_LEN+1, 31);
 		}
 		switch(chip8_cfg->input_layout) {
 			case CHIP8_LAYOUT_QWERTY:

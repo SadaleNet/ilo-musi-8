@@ -861,6 +861,27 @@ XXXXX__
 _X_____
 __X____
 ''',
+'LANG_SP':
+'''
+XXXXXXXXX________
+X_______X________
+X_______X_X_____X
+X_X_X_X_X_X_____X
+X_______X__XXXXX_
+X_______X________
+XXXXXXXXX________
+''',
+'LANG_QSS':
+'''
+__X___XXXXX__X_X
+_XX_____X___XX_X
+__X____XX____X_X
+__X___X_X____X_X
+XXX_____X____X_X
+__X____XX____X_X
+__X___X_X____X_X
+XXXXX___X__XXXXX
+''',
 }
 
 def get_font_and_icon_declarations():
@@ -869,7 +890,7 @@ def get_font_and_icon_declarations():
 	for k, v in BITMAP_ICONS.items():
 		bitmap = bitmap_to_bytes(v)
 		ret += f"extern const uint8_t ICON_{k}[];\n"
-		ret += f"extern const size_t ICON_{k}_LENGTH;\n"
+		ret += f"extern const size_t ICON_{k}_LEN;\n"
 	return ret
 
 def get_font_and_icon_tables():
@@ -885,5 +906,5 @@ def get_font_and_icon_tables():
 	for k, v in BITMAP_ICONS.items():
 		bitmap = bitmap_to_bytes(v)
 		ret += f"const uint8_t ICON_{k}[] = {{{to_c_array(bitmap)} }};\n"
-		ret += f"const size_t ICON_{k}_LENGTH = {len(bitmap)};\n"
+		ret += f"const size_t ICON_{k}_LEN = {len(bitmap)};\n"
 	return ret

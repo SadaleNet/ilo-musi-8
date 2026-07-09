@@ -25,8 +25,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include "lcd.h" // for DISPLAY_WIDTH and DISPLAY_HEIGHT
-#include "config.h" // for enum config_lang
-#include "generated.h" // for font and enum tr_msg_id
+#include "draw.h" // for font and enum tr_msg_id
 #include <assert.h>
 #include <string.h>
 
@@ -74,17 +73,17 @@ uint8_t draw_get_translated_width(enum config_lang lang, enum tr_msg_id msg_id) 
 	switch(lang) {
 		case LANG_EN: return strlen(TR_MSG_EN[msg_id])*6;
 		case LANG_TOK: return strlen(TR_MSG_TOK[msg_id])*6;
-		case LANG_SP: return TR_MSG_SP_LEN[msg_id];
-		case LANG_QSS: return TR_MSG_QSS_LEN[msg_id];
+		case LANG_SP: return TR_MSG_SP_LEN[msg_id]+1;
+		case LANG_QSS: return TR_MSG_QSS_LEN[msg_id]+1;
 		default: assert(false);
 	}
 }
 
 void draw_translated(uint8_t *buffer, enum config_lang lang, enum tr_msg_id msg_id, uint8_t x, uint8_t y) {
 	switch(lang) {
-		case LANG_EN: draw_text(buffer, TR_MSG_EN[msg_id], x, y+1); break;
-		case LANG_TOK: draw_text(buffer, TR_MSG_TOK[msg_id], x, y+1); break;
-		case LANG_SP: draw_bitmap_h8(buffer, TR_MSG_SP[msg_id], TR_MSG_SP_LEN[msg_id], x, y); break;
+		case LANG_EN: draw_text(buffer, TR_MSG_EN[msg_id], x, y+Y_ADJ); break;
+		case LANG_TOK: draw_text(buffer, TR_MSG_TOK[msg_id], x, y+Y_ADJ); break;
+		case LANG_SP: draw_bitmap_h8(buffer, TR_MSG_SP[msg_id], TR_MSG_SP_LEN[msg_id], x, y+Y_ADJ_SP); break;
 		case LANG_QSS: draw_bitmap_h8(buffer, TR_MSG_QSS[msg_id], TR_MSG_QSS_LEN[msg_id], x, y); break;
 		default: assert(false);
 	}

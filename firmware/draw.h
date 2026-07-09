@@ -28,6 +28,9 @@
 #include "generated.h"
 #include <stdint.h>
 
+#define Y_ADJ (2) // Adjustment of y position of common content with no translation
+#define Y_ADJ_SP (1) // Adjustment of y position of common content with no translation (content is written in sitelen pona)
+
 void draw_clear(uint8_t *buffer);
 void draw_transfer_row(uint8_t *buffer, uint8_t *bitmap, uint8_t row); // Copy buffer into bitmap. Each row is 8px.
 void draw_clear_row(uint8_t *buffer, uint8_t row);
