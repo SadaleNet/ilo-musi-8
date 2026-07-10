@@ -27,7 +27,176 @@
 from util import to_c_array, bitmap_to_bytes
 
 TRANSLATION_TABLE = {
-"TR_MSG_GC_VOLUME": ("VOLUME", "suli kalama",
+"TR_MSG_GMC_CONFIG": ("CONFIG", "ante pi",
+'''
+_X___X__X______
+__X_X___X______
+___X____X______
+________X______
+___X____X______
+__X_X___X______
+_X___X__XXXXXXX
+''',
+'''
+__XXXXX___XXXXX
+__________X___X
+__XXXXX___X___X
+XXX___X__XX___X
+__X___X_X_X___X
+XXX___X___X___X
+__X___X___X___X
+_XX___X___X___X
+''',
+),
+"TR_MSG_GMC_QUIRKS": ("QUIRKS", "nasin musi",
+'''
+___X_____X___X_
+___X____X_X_X_X
+___X_____X___X_
+__XXX____X___X_
+_X_X_X___X___X_
+___X_____X___X_
+___X______XXX__
+''',
+'''
+__X_________X__
+__X________X_X_
+__X_______X___X
+_XX_______X___X
+X_X_____XXX___X
+__X___X___X___X
+___X_X____X___X
+____X_____X___X
+''',
+),
+"TR_MSG_GMC_SPEED_LIMIT": ("SPEED LIMIT", "tenpo musi",
+'''
+__XXX____X___X_
+_X___XX_X_X_X_X
+X__X__X__X___X_
+X__XX_X__X___X_
+X_____X__X___X_
+_X___X___X___X_
+__XXX_____XXX__
+''',
+'''
+__XXXXX___XXXXX
+__________X_X_X
+_XXXXXX___X_X_X
+X_X_X_X__XX_X_X
+__X_X_X_X_X___X
+_XX_X_X__XX___X
+X_X_X_____X___X
+_XX_X_____X___X
+''',
+),
+"TR_MSG_GMC_USE_BOOTROM": ("USE AS BOOTROM", "o kama musi open",
+'''
+___X_______X____X___X__X_____X
+___X______X_X__X_X_X_X_X_____X
+___X______X_X___X___X__X_____X
+_________X___X__X___X__X_____X
+___X_____X___X__X___X__XXXXXXX
+__X_X__X_X___X__X___X__X_____X
+___X____X__XX____XXX___XXXXXXX
+''',
+'''
+__XXXXX___X___X___X___X_____X____X______X___X
+__X___X__XX___X__XX___X____XXX__XX______X___X
+__XXXXX___X___X___X___X___X_X_X__X______X___X
+__X___X___X___X_X_X_X_X_X_X_X____X____XXX___X
+__X___X__XX___X__XX_X_X__XX_X____X______X___X
+XXX___X_X_X___X_X_X_X_X_X_X_X____X_X____XXXXX
+__X___X___X___X____XXX____X_X____XX_X___X___X
+__X___X___XXXXX_____X_____X_X____X___X__XXXXX
+''',
+),
+"TR_MSG_GMC_CUSTOM": ("CUSTOM", "nanpa",
+'''
+_X___X____X____
+XXXXXXX__X_____
+_X___X___X_____
+_X___X___XXXX__
+_X___X___X___X_
+XXXXXXX__X___X_
+_X___X____XXX__
+''',
+'''
+XXXXX___XXXXX__X___X
+________X___X_XX___X
+XXXXX___X___X__X___X
+X___X__XX___X__X___X
+X___X_X_X___X__X___X
+X___X___X___X__XXXXX
+X___X___X___X_______
+X___X___X___X__XXXXX
+''',
+),
+"TR_MSG_GMC_TYPEHEX": ("TYPE HEX", "o pana e nanpa!",
+'''
+__X___X__X__X_________X___X_
+__X____X_X_X__X__X___XXXXXXX
+__X____________X__X___X___X_
+________XXXX____X__X__X___X_
+__X____X____X__X__X___X___X_
+_X_X__XX____X_X__X___XXXXXXX
+__X____X____X_________X___X_
+''',
+'''
+XXXXX___X___X_XXXXX
+X______XX___X______
+X_______X___X_XXXXX
+X______XX___X_X___X
+X_____X_X_X_X_X___X
+X______XX_X_X_X___X
+X_______X_X_X_X___X
+X_______XXXXX_X___X
+''',
+),
+"TR_MSG_GMC_TYPEDIGITS": ("TYPE DIGITS", "o pana e nanpa!",
+'''
+__X___X__X__X_________X___X_
+__X____X_X_X__X__X___XXXXXXX
+__X____________X__X___X___X_
+________XXXX____X__X__X___X_
+__X____X____X__X__X___X___X_
+_X_X__XX____X_X__X___XXXXXXX
+__X____X____X_________X___X_
+''',
+'''
+XXXXX___X___X_XXXXX
+X______XX___X______
+X_______X___X_XXXXX
+X______XX___X_X___X
+X_____X_X_X_X_X___X
+X______XX_X_X_X___X
+X_______X_X_X_X___X
+X_______XXXXX_X___X
+''',
+),
+"TR_MSG_GMC_OVERWRITE": ("OVERWRITE BOOTROM", "o kama!",
+'''
+___X_______X__
+___X______X_X_
+___X______X_X_
+_________X___X
+___X_____X___X
+__X_X__X_X___X
+___X____X__XX_
+''',
+'''
+XXXXX___XXXXX___X___X_____X____X______X___X
+________X_X_X__XX___X____XXX__XX______X___X
+XXXXX___X_X_X___X___X___X_X_X__X______X___X
+__X_X_X_X_X_X_X_X_X_X_X_X_X____X____XXX___X
+___XX__XX___X__XX_X_X__XX_X____X______X___X
+__X_X_X_X___X_X_X_X_X_X_X_X____X_X____XXXXX
+____X___X___X____XXX____X_X____XX_X___X___X
+___XX___X___X_____X_____X_X____X___X__XXXXX
+''',
+),
+
+"TR_MSG_GLBC_VOLUME": ("VOLUME", "suli kalama",
 '''
 X_____X_X__X__X
 X_____X__X_X_X_
@@ -48,7 +217,7 @@ __X___X______
 __XXXXX_XXXXX
 ''',
 ),
-"TR_MSG_GC_BACKLIGHT": ("BACKLIGHT", "suli suno",
+"TR_MSG_GLBC_BACKLIGHT": ("BACKLIGHT", "suli suno",
 '''
 X_____X____X___
 X_____X___XXX__
@@ -69,7 +238,7 @@ ________X___X
 XXXXX___X___X
 ''',
 ),
-"TR_MSG_GC_CONTRAST": ("CONTRAST", "wawa pimeja",
+"TR_MSG_GLBC_CONTRAST": ("CONTRAST", "wawa pimeja",
 '''
 X_______X____X___
 X_______X___X_X__
@@ -90,7 +259,7 @@ ____X___X_X_____X___X
 ____X___X_X_____X___X
 ''',
 ),
-"TR_MSG_GC_LANG": ("LANGUAGE", "toki",
+"TR_MSG_GLBC_LANG": ("LANGUAGE", "toki",
 '''
 ___X___
 X_____X
@@ -111,7 +280,7 @@ ______________
 XXXXX___XXXXX_
 ''',
 ),
-"TR_MSG_GC_CLR_BOOTROM": ("CLEAR BOOTROM", "o weka e musi open",
+"TR_MSG_GLBC_CLR_BOOTROM": ("CLEAR BOOTROM", "o weka e musi open",
 '''
 ___X___X_____X__________X___X__X_____X
 ___X____X___X___X__X___X_X_X_X_X_____X
@@ -122,17 +291,17 @@ __X_X___X___X___X__X____X___X__X_____X
 ___X___X_____X___________XXX___XXXXXXX
 ''',
 '''
-__XXXXX_XXXXX___X___X_____X____X_______X___X
-_______________XX___X____XXX__XX_______X___X
-__XXXXX_XXXXX___X___X___X_X_X__X_______X___X
-_XX___X___X_X_X_X_X_X_X_X_X____X_____XXX___X
-X_X___X____XX__XX_X_X__XX_X____X_______X___X
-__X___X___X_X_X_X_X_X_X_X_X____X_X_____XXXXX
-_XX___X_____X____XXX____X_X____XX_X____X___X
-__X___X____XX_____X_____X_X____X___X___XXXXX
+__XXXXX_XXXXX___X___X_____X____X______X___X
+_______________XX___X____XXX__XX______X___X
+__XXXXX_XXXXX___X___X___X_X_X__X______X___X
+_XX___X___X_X_X_X_X_X_X_X_X____X____XXX___X
+X_X___X____XX__XX_X_X__XX_X____X______X___X
+__X___X___X_X_X_X_X_X_X_X_X____X_X____XXXXX
+_XX___X_____X____XXX____X_X____XX_X___X___X
+__X___X____XX_____X_____X_X____X___X__XXXXX
 ''',
 ),
-"TR_MSG_GC_CONFIRM_CLR_BOOTROM": ("CONFIRM CLEAR", "o pali!", # TODO
+"TR_MSG_GLBC_CONFIRM_CLR_BOOTROM": ("CONFIRM CLEAR", "o pali!", # TODO
 '''
 ___X_______XX__
 ___X______X__X_

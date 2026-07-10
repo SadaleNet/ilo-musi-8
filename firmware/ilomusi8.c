@@ -218,22 +218,50 @@ static void apply_contrast(void) {
 	lcd_set_contrast(CONTRAST_MAP[global_config.contrast]);
 }
 
+static void draw_message_with_dots_suffix(enum tr_msg_id msg_id, uint8_t max_dots, uint8_t x, uint8_t y) {
+	draw_translated(chip8.periph.display, global_config.language, msg_id, x, y);
+	uint8_t width = draw_get_translated_width(global_config.language, msg_id);
+	char str[22];
+	uint8_t prefix_letters = (width+5)/6;
+	memset(str, '.', max_dots-prefix_letters);
+	str[max_dots-prefix_letters] = '\0';
+	draw_text(chip8.periph.display, str, 12+prefix_letters*6, y+Y_ADJ);
+}
+
+static void prepare_game_launch(void) {
+	memcpy(last_storage_flag, chip8_cfg->storage_flags, sizeof(chip8_cfg->storage_flags));
+	// Initialize peripheral variables
+	buzzer_set_buffer(chip8.periph.audio);
+	buzzer_set_pitch(chip8.periph.audio_pitch);
+	if(chip8_cfg->speed == 0) {
+		game_min_cycle_interval = 0; // Unlimited framerate
+	} else {
+		game_min_cycle_interval = FUNCONF_SYSTEM_CORE_CLOCK/60/chip8_cfg->speed;
+	}
+	last_frame_processed_tick = systick_now - game_min_cycle_interval;
+	last_lcd_blit_tick = systick_now - FUNCONF_SYSTEM_CORE_CLOCK/60;
+	game_paused = false;
+}
+
 static void screen_error_handler(void) {
 	bool device_disabled = (file_io_result == FR_LOW_BATTERY);
 	if(!device_disabled) {
 		uint32_t button_press = chip8_keymap(adc_button_get_just_pressed());
 		if(button_press & (1<<0x10)) {
-			menu_current_dir[0] = '\0';
-			menu_offset = 0;
-			menu_cache_invalidated = true;
 			screen_state = SCREEN_MENU;
 		} else if((button_press & (1<<0xD))) { // Allows visiting global config screen with D button even with card error
 			memcpy(&global_config_backup, &global_config, sizeof(global_config_backup));
 			screen_state = SCREEN_GLOBAL_CONFIG;
-			menu_display_update_required = true;
 		}
 
 		if(screen_state != SCREEN_ERROR) {
+			// Always invalidate cache and change to root directory
+			// and reset cursor before leaving the screen.
+			// This way next time we land on SCREEN_MENU, via or not via SCREEN_GLOBAL_CONFIG,
+			// we'd always retry loading the root directory
+			menu_current_dir[0] = '\0';
+			menu_offset = 0;
+			menu_cache_invalidated = true;
 			return;
 		}
 	}
@@ -284,21 +312,6 @@ static void screen_error_handler(void) {
 		lcd_transfer_begin(chip8.periph.display);
 		menu_display_update_required = false;
 	}
-}
-
-static void prepare_game_launch(void) {
-	memcpy(last_storage_flag, chip8_cfg->storage_flags, sizeof(chip8_cfg->storage_flags));
-	// Initialize peripheral variables
-	buzzer_set_buffer(chip8.periph.audio);
-	buzzer_set_pitch(chip8.periph.audio_pitch);
-	if(chip8_cfg->speed == 0) {
-		game_min_cycle_interval = 0; // Unlimited framerate
-	} else {
-		game_min_cycle_interval = FUNCONF_SYSTEM_CORE_CLOCK/60/chip8_cfg->speed;
-	}
-	last_frame_processed_tick = systick_now - game_min_cycle_interval;
-	last_lcd_blit_tick = systick_now - FUNCONF_SYSTEM_CORE_CLOCK/60;
-	game_paused = false;
 }
 
 static bool screen_menu_selected_item_is_a_file(void) {
@@ -618,34 +631,36 @@ static void screen_game_config_handler(void) {
 
 	if(menu_display_update_required) {
 		draw_clear(chip8.periph.display);
-		draw_text(chip8.periph.display, "CONFIG", 0, 0);
-		draw_text(chip8.periph.display, menu_file_list[menu_offset%MENU_PAGE_SIZE], 42, 0);
+		draw_translated(chip8.periph.display, global_config.language, TR_MSG_GMC_CONFIG, 0, 0);
+		draw_text(chip8.periph.display, MENU_SELECTED_FILENAME,
+			draw_get_translated_width(global_config.language, TR_MSG_GMC_CONFIG)+6, 0+Y_ADJ
+		);
 
-		draw_text(chip8.periph.display, "QUIRKS.....", 12, 14);
-		draw_text(chip8.periph.display, "SPEED LIMIT......", 12, 23);
-		draw_text(chip8.periph.display, "USE AS BOOTROM", 12, 32);
+		draw_message_with_dots_suffix(TR_MSG_GMC_QUIRKS, 11, 12, 14);
+		draw_message_with_dots_suffix(TR_MSG_GMC_SPEED_LIMIT, 17, 12, 23);
+		draw_translated(chip8.periph.display, global_config.language, TR_MSG_GMC_USE_BOOTROM, 12, 32);
 
 		if(game_config_selection == GAME_CONFIG_QUIRKS_CUSTOM) {
 			char value_str[9];
 			sprintf(value_str, "%08lX", chip8_cfg->quirks);
 			value_str[game_config_index] = '\0';
-			draw_text(chip8.periph.display, value_str, 78, 14);
+			draw_text(chip8.periph.display, value_str, 78, 14+Y_ADJ);
 		} else {
 			switch(chip8_cfg->quirks) {
 				case CHIP8_QUIRK_PLATFORM_VIP:
-					draw_text(chip8.periph.display, ".....VIP", 78, 14);
+					draw_text(chip8.periph.display, ".....VIP", 78, 14+Y_ADJ);
 				break;
 				case CHIP8_QUIRK_PLATFORM_SCHIP:
-					draw_text(chip8.periph.display, "...SCHIP", 78, 14);
+					draw_text(chip8.periph.display, "...SCHIP", 78, 14+Y_ADJ);
 				break;
 				case CHIP8_QUIRK_PLATFORM_OCTO:
-					draw_text(chip8.periph.display, "....OCTO", 78, 14);
+					draw_text(chip8.periph.display, "....OCTO", 78, 14+Y_ADJ);
 				break;
 				default:
 				{
 					char value_str[9];
 					sprintf(value_str, "%08lX", chip8_cfg->quirks);
-					draw_text(chip8.periph.display, value_str, 78, 14);
+					draw_text(chip8.periph.display, value_str, 78, 14+Y_ADJ);
 				}
 				break;
 			}
@@ -655,58 +670,58 @@ static void screen_game_config_handler(void) {
 				char value_str[2];
 				value_str[0] = (chip8_cfg->speed/10) + '0';
 				value_str[1] = '\0';
-				draw_text(chip8.periph.display, value_str, 114, 23);
+				draw_text(chip8.periph.display, value_str, 114, 23+Y_ADJ);
 			}
 		} else {
 			char value_str[3];
 			value_str[0] = (chip8_cfg->speed/10) + '0';
 			value_str[1] = (chip8_cfg->speed%10) + '0';
 			value_str[2] = '\0';
-			draw_text(chip8.periph.display, value_str, 114, 23);
+			draw_text(chip8.periph.display, value_str, 114, 23+Y_ADJ);
 		}
 
 		switch(game_config_selection) {
 			case GAME_CONFIG_MAIN:
-				draw_text(chip8.periph.display, "A)", 0, 14);
-				draw_text(chip8.periph.display, "B)", 0, 23);
-				draw_text(chip8.periph.display, "C)", 0, 32);
-				draw_text(chip8.periph.display, "F)SAVE", 0, 47);
-				draw_text(chip8.periph.display, "X)CANCEL", 0, 56);
+				draw_text(chip8.periph.display, "A)", 0, 14+Y_ADJ);
+				draw_text(chip8.periph.display, "B)", 0, 23+Y_ADJ);
+				draw_text(chip8.periph.display, "C)", 0, 32+Y_ADJ);
+				draw_text(chip8.periph.display, "F)", 0, 47+Y_ADJ);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_SAVE, 12, 47);
+				draw_text(chip8.periph.display, "X)", 0, 56+Y_ADJ);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_CANCEL, 12, 56);
 			break;
 			case GAME_CONFIG_QUIRKS:
-				draw_text(chip8.periph.display, "=>", 0, 14);
-				draw_text(chip8.periph.display, "1)VIP 2)SCHIP 3)OCTO", 0, 47);
-				draw_text(chip8.periph.display, "4)CUSTOM X)CANCEL", 0, 56);
+				draw_text(chip8.periph.display, "=>", 0, 14+Y_ADJ);
+				draw_text(chip8.periph.display, "1)VIP 2)SCHIP 3)OCTO", 0, 47+Y_ADJ);
+				draw_text(chip8.periph.display, "4)       X)", 0, 56+Y_ADJ);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_GMC_CUSTOM, 12, 56);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_CANCEL, 66, 56);
 			break;
 			case GAME_CONFIG_QUIRKS_CUSTOM:
-				draw_text(chip8.periph.display, "=>", 0, 14);
-				draw_text(chip8.periph.display, "0-F)TYPE HEX", 0, 47);
-				draw_text(chip8.periph.display, "X)CANCEL", 0, 56);
+				draw_text(chip8.periph.display, "=>", 0, 14+Y_ADJ);
+				draw_text(chip8.periph.display, "0-F)", 0, 47+Y_ADJ);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_GMC_TYPEHEX, 24, 47);
+				draw_text(chip8.periph.display, "X)", 0, 56+Y_ADJ);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_CANCEL, 12, 56);
 			break;
 			case GAME_CONFIG_SPEED:
-				draw_text(chip8.periph.display, "=>", 0, 23);
-				draw_text(chip8.periph.display, "0-9)TYPE DIGITS", 0, 47);
-				draw_text(chip8.periph.display, "X)CANCEL", 0, 56);
+				draw_text(chip8.periph.display, "=>", 0, 23+Y_ADJ);
+				draw_text(chip8.periph.display, "0-9)", 0, 47+Y_ADJ);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_GMC_TYPEDIGITS, 24, 47);
+				draw_text(chip8.periph.display, "X)", 0, 56+Y_ADJ);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_CANCEL, 12, 56);
 			break;
 			case GAME_CONFIG_BOOT_ROM:
-				draw_text(chip8.periph.display, "=>", 0, 32);
-				draw_text(chip8.periph.display, "F)OVERWRITE BOOTROM", 0, 47);
-				draw_text(chip8.periph.display, "X)CANCEL", 0, 56);
+				draw_text(chip8.periph.display, "=>", 0, 32+Y_ADJ);
+				draw_text(chip8.periph.display, "F)", 0, 47+Y_ADJ);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_GMC_OVERWRITE, 12, 47);
+				draw_text(chip8.periph.display, "X)", 0, 56+Y_ADJ);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_CANCEL, 12, 56);
 			break;
 		}
 		lcd_transfer_begin(chip8.periph.display);
 		menu_display_update_required = false;
 	}
-}
-
-static void draw_message_with_dots_suffix(enum tr_msg_id msg_id, uint8_t max_dots, uint8_t x, uint8_t y) {
-	draw_translated(chip8.periph.display, global_config.language, msg_id, x, y);
-	uint8_t width = draw_get_translated_width(global_config.language, msg_id);
-	char str[22];
-	uint8_t prefix_letters = (width+5)/6;
-	memset(str, '.', max_dots-prefix_letters);
-	str[max_dots-prefix_letters] = '\0';
-	draw_text(chip8.periph.display, str, 12+prefix_letters*6, y+Y_ADJ);
 }
 
 static void screen_global_config_handler(void) {
@@ -824,11 +839,11 @@ static void screen_global_config_handler(void) {
 	if(menu_display_update_required) {
 		draw_clear(chip8.periph.display);
 
-		draw_message_with_dots_suffix(TR_MSG_GC_VOLUME, 18, 12, 0);
-		draw_message_with_dots_suffix(TR_MSG_GC_BACKLIGHT, 18, 12, 9);
-		draw_message_with_dots_suffix(TR_MSG_GC_CONTRAST, 18, 12, 18);
-		draw_message_with_dots_suffix(TR_MSG_GC_LANG, 16, 12, 27);
-		draw_translated(chip8.periph.display, global_config.language, TR_MSG_GC_CLR_BOOTROM, 12, 36);
+		draw_message_with_dots_suffix(TR_MSG_GLBC_VOLUME, 18, 12, 0);
+		draw_message_with_dots_suffix(TR_MSG_GLBC_BACKLIGHT, 18, 12, 9);
+		draw_message_with_dots_suffix(TR_MSG_GLBC_CONTRAST, 18, 12, 18);
+		draw_message_with_dots_suffix(TR_MSG_GLBC_LANG, 16, 12, 27);
+		draw_translated(chip8.periph.display, global_config.language, TR_MSG_GLBC_CLR_BOOTROM, 12, 36);
 
 		char value_str[2];
 		value_str[1] = '\0';
@@ -888,7 +903,7 @@ static void screen_global_config_handler(void) {
 			case GLOBAL_CONFIG_BOOT_ROM:
 				draw_text(chip8.periph.display, "=>", 0, 36+Y_ADJ);
 				draw_text(chip8.periph.display, "F)", 0, 47+Y_ADJ);
-				draw_translated(chip8.periph.display, global_config.language, TR_MSG_GC_CONFIRM_CLR_BOOTROM, 12, 47);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_GLBC_CONFIRM_CLR_BOOTROM, 12, 47);
 				draw_text(chip8.periph.display, "X)", 0, 56+Y_ADJ);
 				draw_translated(chip8.periph.display, global_config.language, TR_MSG_CANCEL, 12, 56);
 			break;
