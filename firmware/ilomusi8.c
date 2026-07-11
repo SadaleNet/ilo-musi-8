@@ -463,7 +463,7 @@ static void screen_menu_handler(void) {
 			}
 			draw_text(chip8.periph.display, ">", 0, 6*MENU_OFFSET_ON_CURRENT_PAGE);
 		} else {
-			draw_text(chip8.periph.display, "[EMPTY]", 0, 0);
+			draw_translated(chip8.periph.display, global_config.language, TR_MSG_MENU_EMPTY, 0, 0);
 		}
 		// Draw legend
 		draw_text(chip8.periph.display, "2468", 96, 24+1);
@@ -929,7 +929,7 @@ static void screen_pre_gameplay_handler(void) {
 
 	if(menu_display_update_required) {
 		draw_clear(chip8.periph.display);
-		draw_text(chip8.periph.display, "CONTROLS", 40, 0);
+		draw_translated(chip8.periph.display, global_config.language, TR_MSG_PGP_CONTROLS, 64-(draw_get_translated_width(global_config.language, TR_MSG_PGP_CONTROLS)/2), 0);
 		char button_str[17];
 		if(chip8_cfg->input_navigation) {
 			util_print_button_buffer(button_str, chip8_cfg->input_navigation);
@@ -1053,10 +1053,13 @@ static void screen_gameplay_handler(void) {
 			// Display exit countdown
 			draw_clear_row(chip8.periph.display, GAMEPLAY_EXIT_BANNER_ROW_POS);
 			draw_clear_row(chip8.periph.display, GAMEPLAY_EXIT_BANNER_ROW_POS+1);
-			draw_text(chip8.periph.display, "HOLD TO QUIT... ", 13, 29);
+
+			uint8_t w = draw_get_translated_width(global_config.language, TR_MSG_GP_HOLDTOQUIT);
+			uint8_t x = 64-(w+12)/2;
+			draw_translated(chip8.periph.display, global_config.language, TR_MSG_GP_HOLDTOQUIT, x, 28);
 			uint8_t digit = (GAMEPLAY_EXIT_DURATION_MS/1000 - (systick_now-game_paused_start_tick)/FUNCONF_SYSTEM_CORE_CLOCK);
 			char str[2]; str[0] = '0' + digit; str[1] = '\0';
-			draw_text(chip8.periph.display, str, 109, 29);
+			draw_text(chip8.periph.display, str, x+w+6, 28+Y_ADJ);
 		}
 		// There's no double-buffering for saving 1kB of RAM.
 		// There still won't be tearing because the LCD's response time
@@ -1077,8 +1080,10 @@ static void screen_gameover_handler(void) {
 
 	if(menu_display_update_required) {
 		draw_clear(chip8.periph.display);
-		draw_text(chip8.periph.display, "GAME OVER", 37, 24);
-		draw_text(chip8.periph.display, "PRESS <X> TO QUIT", 13, 34);
+		draw_translated(chip8.periph.display, global_config.language, TR_MSG_GAMEOVER,
+			64-draw_get_translated_width(global_config.language, TR_MSG_GAMEOVER)/2, 22);
+		draw_translated(chip8.periph.display, global_config.language, TR_MSG_GAMEOVER_PROCEED,
+			64-draw_get_translated_width(global_config.language, TR_MSG_GAMEOVER_PROCEED)/2, 32);
 		lcd_transfer_begin(chip8.periph.display);
 		menu_display_update_required = false;
 	}
@@ -1094,6 +1099,8 @@ static void screen_game_crashed_handler(void) {
 
 	if(menu_display_update_required) {
 		draw_clear(chip8.periph.display);
+		// Intentionally untranslated
+		// There isn't any appropriate toki pona words for the errors
 		switch(chip8.periph.requests & CHIP8_REQUEST_HALT_MASK) {
 			case CHIP8_REQUEST_HALT_I_ERROR:
 				draw_text(chip8.periph.display, "I ERROR", 0, 0);
@@ -1150,8 +1157,10 @@ static void screen_fw_update_ok_handler(void) {
 
 	if(menu_display_update_required) {
 		draw_clear(chip8.periph.display);
-		draw_text(chip8.periph.display, "UPDATE COMPLETED", 16, 24);
-		draw_text(chip8.periph.display, "PRESS <X> TO PROCEED", 4, 34);
+		draw_translated(chip8.periph.display, global_config.language, TR_MSG_FWU_OK,
+			64-draw_get_translated_width(global_config.language, TR_MSG_FWU_OK)/2, 22);
+		draw_translated(chip8.periph.display, global_config.language, TR_MSG_FWU_PROCEED,
+			64-draw_get_translated_width(global_config.language, TR_MSG_FWU_PROCEED)/2, 32);
 		lcd_transfer_begin(chip8.periph.display);
 		menu_display_update_required = false;
 	}
