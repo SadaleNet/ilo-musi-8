@@ -251,6 +251,7 @@ static void screen_error_handler(void) {
 			screen_state = SCREEN_MENU;
 		} else if((button_press & (1<<0xD))) { // Allows visiting global config screen with D button even with card error
 			memcpy(&global_config_backup, &global_config, sizeof(global_config_backup));
+			menu_display_update_required = true;
 			screen_state = SCREEN_GLOBAL_CONFIG;
 		}
 
@@ -269,44 +270,44 @@ static void screen_error_handler(void) {
 	if(menu_display_update_required) {
 		draw_clear(chip8.periph.display);
 		draw_text(chip8.periph.display, "XXXXXXXXXXXXXXXXXXXXX", 0, 0);
-		draw_text(chip8.periph.display, "CARD ERROR #", 0, 10);
+		draw_translated(chip8.periph.display, global_config.language, TR_MSG_ERR_TITLE, 0, 10);
+
 		char errorcode[3] = {0};
 		errorcode[0] = file_io_result/10 + '0';
 		errorcode[1] = file_io_result%10 + '0';
 		errorcode[2] = '\0';
-		draw_text(chip8.periph.display, errorcode, 6*12, 10);
+		draw_text(chip8.periph.display, errorcode, draw_get_translated_width(global_config.language, TR_MSG_ERR_TITLE), 10+Y_ADJ);
 		switch(file_io_result) {
-			case FR_NOT_READY:
-				draw_text(chip8.periph.display, "NO CARD", 0, 20);
+			case FR_NOT_READY: // No card
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_ERR_NOT_READY, 0, 20);
 			break;
 			case FR_NO_FILESYSTEM:
-				draw_text(chip8.periph.display, "FILESYSTEM ERROR", 0, 20);
-				draw_text(chip8.periph.display, "REQUIRES FAT16/FAT32", 0, 30);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_ERR_NO_FILESYSTEM, 0, 20);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_ERR_NO_FILESYSTEM2, 0, 30);
 			break;
 			case FR_INI_PARSE_ERROR:
-				draw_text(chip8.periph.display, "INVALID CONFIG INI", 0, 20);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_ERR_INI_PARSE, 0, 20);
 			break;
 			case FR_VOLUME_FULL:
-				draw_text(chip8.periph.display, "VOLUME FULL", 0, 20);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_ERR_VOLUME_FULL, 0, 20);
 			break;
 			case FR_PATH_LENGTH_ERROR:
-				draw_text(chip8.periph.display, "PATH TOO LONG", 0, 20);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_ERR_PATH_LENGTH, 0, 20);
 			break;
 			case FR_FIRMWARE_VERIFICATION_ERROR:
-				draw_text(chip8.periph.display, "FW VERIFY ERROR", 0, 20);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_ERR_FIRMWARE_VERIFICATION, 0, 20);
 			break;
 			case FR_BOOTROM_VERIFICATION_ERROR:
-				draw_text(chip8.periph.display, "BOOTROM CRC ERROR", 0, 20);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_ERR_BOOTROM_VERIFICATION, 0, 20);
 			break;
 			case FR_LOW_BATTERY:
-				draw_text(chip8.periph.display, "LOW BATTERY", 0, 20);
-				draw_text(chip8.periph.display, "PLEASE REPLACE", 0, 30);
+				draw_translated(chip8.periph.display, global_config.language, TR_MSG_ERR_LOW_BATTERY, 0, 20);
 			break;
 			default:
 			break;
 		}
 		if(!device_disabled) {
-			draw_text(chip8.periph.display, "PRESS <X> TO RETRY", 0, 48);
+			draw_translated(chip8.periph.display, global_config.language, TR_MSG_ERR_PROCEED, 0, 48);
 		}
 		draw_text(chip8.periph.display, "XXXXXXXXXXXXXXXXXXXXX", 0, 58);
 		lcd_transfer_begin(chip8.periph.display);
