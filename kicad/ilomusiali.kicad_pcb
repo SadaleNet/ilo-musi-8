@@ -21423,7 +21423,7 @@
 				)
 			)
 		)
-		(property "Value" "CH32V006F8U6"
+		(property "Value" "CH32V006F8U7"
 			(at 0 2.83 180)
 			(layer "F.Fab")
 			(uuid "152488a5-b1f9-436f-89f7-e77958d7dd51")
@@ -21434,7 +21434,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.wch-ic.com/products/CH32V003.html"
+		(property "Datasheet" "https://www.wch-ic.com/products/CH32V006.html"
 			(at 0 0 180)
 			(layer "F.Fab")
 			(hide yes)
@@ -21446,7 +21446,7 @@
 				)
 			)
 		)
-		(property "Description" "CH32V003 series are industrial-grade general-purpose microcontrollers designed based on 32-bit RISC-V instruction set and architecture. It adopts QingKe V2A core, RV32EC instruction set, and supports 2 levels of interrupt nesting. The series are mounted with rich peripheral interfaces and function modules. Its internal organizational structure meets the low-cost and low-power embedded application scenarios."
+		(property "Description" "CH32V006 series are industrial-grade general-purpose microcontrollers designed based on 32-bit RISC-V instruction set and architecture. It adopts QingKe V2A core, RV32EC instruction set, and supports 2 levels of interrupt nesting. The series are mounted with rich peripheral interfaces and function modules. Its internal organizational structure meets the low-cost and low-power embedded application scenarios."
 			(at 0 0 180)
 			(layer "F.Fab")
 			(hide yes)
@@ -21470,7 +21470,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C42431288"
+		(property "LCSC" "C55112440"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
