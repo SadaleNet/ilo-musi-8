@@ -957,6 +957,13 @@ static void screen_pre_gameplay_handler(void) {
 				draw_text(chip8.periph.display, "A0BF  ZXCV", 34, 40+18);
 				draw_text(chip8.periph.display, "=", 64-3, 40+9);
 			break;
+			case CHIP8_LAYOUT_HP48:
+				draw_text(chip8.periph.display, "123C  789/", 34, 40);
+				draw_text(chip8.periph.display, "456D  456X", 34, 40+6);
+				draw_text(chip8.periph.display, "789E  123-", 34, 40+12);
+				draw_text(chip8.periph.display, "A0BF  0.S+", 34, 40+18);
+				draw_text(chip8.periph.display, "=", 64-3, 40+9);
+			break;
 			default:
 				// do not show the layout because it's the same as the keycap label
 			break;
