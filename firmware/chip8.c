@@ -562,6 +562,9 @@ void chip8_step(struct chip8_machine *machine) {
 				break;
 				case 0x001E: // FX1E
 					*i += *vx;
+					if(cpu->quirks & CHIP8_QUIRK_FX1E_REPORT_OVERFLOW) {
+						*vf = (*i >= CHIP8_MEMORY_SIZE);
+					}
 				break;
 				case 0x0029: // FX29
 					*i = (*vx & 0x0F) * 5;

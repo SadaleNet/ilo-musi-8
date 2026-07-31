@@ -48,6 +48,7 @@
 #define CHIP8_QUIRK_HIRES_COLLISION (1U<<10)
 #define CHIP8_QUIRK_RESIZE_CLEAR_SCREEN (1U<<11)
 #define CHIP8_QUIRK_VF_ORDER (1U<<12) // No clue on what it does. Unimplemented.
+#define CHIP8_QUIRK_FX1E_REPORT_OVERFLOW (1U<<13) // Set Vf to 1 upon FX1E causes I overflow, 0 else. Used by Spacefight 2019.
 
 struct chip8_cpu {
 	uint8_t pc_index:4;
