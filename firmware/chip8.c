@@ -533,99 +533,112 @@ void chip8_step(struct chip8_machine *machine) {
 			}
 		break;
 		case 0xF000:
-			switch(instruction & 0x00FF) {
+			switch(instruction & 0x0FFF) {
+				case 0x0000: // F000 NNNN XO-Chip
+				{
+					CHIP8_HALT(cpu->pc[cpu->pc_index]+3 >= CHIP8_MEMORY_SIZE, CHIP8_REQUEST_HALT_PC_ERROR);
+					uint16_t address = (mem[cpu->pc[cpu->pc_index]+2] << 8) | (mem[cpu->pc[cpu->pc_index]+3]);
+					*i = address;
+					CHIP8_HALT(*i >= CHIP8_MEMORY_SIZE, CHIP8_REQUEST_HALT_I_ERROR);
+					cpu->pc[cpu->pc_index] += 2;
+				}
+				break;
 				case 0x0002: // F002 XO-Chip
 					CHIP8_HALT(*i+CHIP8_AUDIO_BUFFER_SIZE-1 >= CHIP8_MEMORY_SIZE, CHIP8_REQUEST_HALT_I_ERROR);
 					memcpy(periph->audio, &mem[(*i)], CHIP8_AUDIO_BUFFER_SIZE);
 					periph->requests |= CHIP8_REQUEST_AUDIO_BUFFER_UPDATED;
 				break;
-				case 0x0007: // FX07
-					*vx = periph->delay_timer;
-				break;
-				case 0x000A: // FX0A
-					if(!periph->key_just_released) {
-						prevents_stepping = 1;
-					} else {
-						for(size_t k=0; k<16; k++) {
-							if(periph->key_just_released & (1<<k)) {
-								*vx = k;
-								break;
+				default:
+					switch(instruction & 0x00FF) {
+						case 0x0007: // FX07
+							*vx = periph->delay_timer;
+						break;
+						case 0x000A: // FX0A
+							if(!periph->key_just_released) {
+								prevents_stepping = 1;
+							} else {
+								for(size_t k=0; k<16; k++) {
+									if(periph->key_just_released & (1<<k)) {
+										*vx = k;
+										break;
+									}
+								}
+							}
+						break;
+						case 0x0015: // FX15
+							periph->delay_timer = *vx;
+						break;
+						case 0x0018: // FX18
+							periph->sound_timer = *vx;
+						break;
+						case 0x001E: // FX1E
+							*i += *vx;
+							if(cpu->quirks & CHIP8_QUIRK_FX1E_REPORT_OVERFLOW) {
+								*vf = (*i >= CHIP8_MEMORY_SIZE);
+							}
+						break;
+						case 0x0029: // FX29
+							*i = (*vx & 0x0F) * 5;
+						break;
+						case 0x0030: // FX30 Superchip
+							*i = (16 * 5) + ((*vx & 0x0F) * 10);
+						break;
+						case 0x0033: // FX33
+							CHIP8_HALT(*i+2 >= CHIP8_MEMORY_SIZE, CHIP8_REQUEST_HALT_I_ERROR);
+							mem[*i] = *vx / 100;
+							mem[*i+1] = (*vx - mem[*i] * 100) / 10;
+							mem[*i+2] = *vx - mem[*i]*100 - mem[*i+1]*10;
+						break;
+						case 0x003A: // FX3A XO-Chip
+							periph->audio_pitch = *vx;
+							periph->requests |= CHIP8_REQUEST_AUDIO_PITCH_UPDATED;
+						break;
+						case 0x0055: // FX55
+						{
+							uint8_t n = (instruction & 0x0F00)>>8;
+							CHIP8_HALT(*i+n >= CHIP8_MEMORY_SIZE, CHIP8_REQUEST_HALT_I_ERROR);
+							for(size_t x=0; x<=n; x++) {
+								mem[*i+x] = cpu->v[x];
+							}
+							if(cpu->quirks & CHIP8_QUIRK_MEMORY_LEAVE_I_UNCHANGED) {
+								// Do not increase I here: a.k.a. do nothing!
+							} else if (cpu->quirks & CHIP8_QUIRK_MEMORY_INCREASE_BY_X) {
+								*i += n;
+							} else {
+								// With this instruction, it's possible to for i to reach 0x1000 without halting the machine
+								// However, as soon as anything got accessed via the i, the machine would halt.
+								*i += n+1;
 							}
 						}
+						break;
+						case 0x0065: // FX65
+						{
+							uint8_t n = (instruction & 0x0F00)>>8;
+							CHIP8_HALT(*i+n >= CHIP8_MEMORY_SIZE, CHIP8_REQUEST_HALT_I_ERROR);
+							for(size_t x=0; x<=n; x++) {
+								cpu->v[x] = mem[(*i)+x];
+							}
+							if(cpu->quirks & CHIP8_QUIRK_MEMORY_LEAVE_I_UNCHANGED) {
+								// Do not increase I here: a.k.a. do nothing!
+							} else if (cpu->quirks & CHIP8_QUIRK_MEMORY_INCREASE_BY_X) {
+								*i += n;
+							} else {
+								// With this instruction, it's possible to for i to reach 0x1000 without halting the machine
+								// However, as soon as anything got accessed via the i, the machine would halt.
+								*i += n+1;
+							}
+						}
+						break;
+						case 0x0075: // FX75 Superchip
+							memcpy(periph->storage_flags, cpu->v, ((instruction & 0x0F00)>>8)+1);
+						break;
+						case 0x0085: // FX85 Superchip
+							memcpy(cpu->v, periph->storage_flags, ((instruction & 0x0F00)>>8)+1);
+						break;
+						default:
+							CHIP8_HALT(1, CHIP8_REQUEST_HALT_INVALID_INSTRUCTION);
+						break;
 					}
-				break;
-				case 0x0015: // FX15
-					periph->delay_timer = *vx;
-				break;
-				case 0x0018: // FX18
-					periph->sound_timer = *vx;
-				break;
-				case 0x001E: // FX1E
-					*i += *vx;
-					if(cpu->quirks & CHIP8_QUIRK_FX1E_REPORT_OVERFLOW) {
-						*vf = (*i >= CHIP8_MEMORY_SIZE);
-					}
-				break;
-				case 0x0029: // FX29
-					*i = (*vx & 0x0F) * 5;
-				break;
-				case 0x0030: // FX30 Superchip
-					*i = (16 * 5) + ((*vx & 0x0F) * 10);
-				break;
-				case 0x0033: // FX33
-					CHIP8_HALT(*i+2 >= CHIP8_MEMORY_SIZE, CHIP8_REQUEST_HALT_I_ERROR);
-					mem[*i] = *vx / 100;
-					mem[*i+1] = (*vx - mem[*i] * 100) / 10;
-					mem[*i+2] = *vx - mem[*i]*100 - mem[*i+1]*10;
-				break;
-				case 0x003A: // FX3A XO-Chip
-					periph->audio_pitch = *vx;
-					periph->requests |= CHIP8_REQUEST_AUDIO_PITCH_UPDATED;
-				break;
-				case 0x0055: // FX55
-				{
-					uint8_t n = (instruction & 0x0F00)>>8;
-					CHIP8_HALT(*i+n >= CHIP8_MEMORY_SIZE, CHIP8_REQUEST_HALT_I_ERROR);
-					for(size_t x=0; x<=n; x++) {
-						mem[*i+x] = cpu->v[x];
-					}
-					if(cpu->quirks & CHIP8_QUIRK_MEMORY_LEAVE_I_UNCHANGED) {
-						// Do not increase I here: a.k.a. do nothing!
-					} else if (cpu->quirks & CHIP8_QUIRK_MEMORY_INCREASE_BY_X) {
-						*i += n;
-					} else {
-						// With this instruction, it's possible to for i to reach 0x1000 without halting the machine
-						// However, as soon as anything got accessed via the i, the machine would halt.
-						*i += n+1;
-					}
-				}
-				break;
-				case 0x0065: // FX65
-				{
-					uint8_t n = (instruction & 0x0F00)>>8;
-					CHIP8_HALT(*i+n >= CHIP8_MEMORY_SIZE, CHIP8_REQUEST_HALT_I_ERROR);
-					for(size_t x=0; x<=n; x++) {
-						cpu->v[x] = mem[(*i)+x];
-					}
-					if(cpu->quirks & CHIP8_QUIRK_MEMORY_LEAVE_I_UNCHANGED) {
-						// Do not increase I here: a.k.a. do nothing!
-					} else if (cpu->quirks & CHIP8_QUIRK_MEMORY_INCREASE_BY_X) {
-						*i += n;
-					} else {
-						// With this instruction, it's possible to for i to reach 0x1000 without halting the machine
-						// However, as soon as anything got accessed via the i, the machine would halt.
-						*i += n+1;
-					}
-				}
-				break;
-				case 0x0075: // FX75 Superchip
-					memcpy(periph->storage_flags, cpu->v, ((instruction & 0x0F00)>>8)+1);
-				break;
-				case 0x0085: // FX85 Superchip
-					memcpy(cpu->v, periph->storage_flags, ((instruction & 0x0F00)>>8)+1);
-				break;
-				default:
-					CHIP8_HALT(1, CHIP8_REQUEST_HALT_INVALID_INSTRUCTION);
 				break;
 			}
 		break;
