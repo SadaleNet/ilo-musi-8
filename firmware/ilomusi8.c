@@ -116,12 +116,32 @@ static void directory_remove_filename(char *directory_str) {
 	}
 }
 
-static void directory_up(char *directory_str) {
+static void directory_up(char *directory_str, char exited_directory_str[14]) {
 	if(strlen(directory_str) >= 1) {
 		// Remove the trailing slash
 		directory_str[strlen(directory_str)-1] = '\0';
-		// Look for the next trailing slash, then make it \0 for upping a directory level
-		directory_remove_filename(directory_str);
+
+		// Find the next trailing slash
+		char *result = strrchr(directory_str, '/');
+		char *removed_directory_ptr = NULL;
+		if(result != NULL) {
+			removed_directory_ptr = &result[1]; // That's the directory name after the trailing slash
+		} else {
+			removed_directory_ptr = directory_str; // No trailing slash found. The entire content's filename.
+		}
+
+		// Extract the directory that we just exited and fill it into exited_directory_str
+		if(exited_directory_str != NULL) {
+			strncpy(exited_directory_str, removed_directory_ptr, 13);
+			exited_directory_str[13-1] = '\0';
+			// Add back the previously removed trailing slash
+			int length = strlen(exited_directory_str); // max length 12
+			exited_directory_str[length] = '/';
+			exited_directory_str[length+1] = '\0';
+		}
+
+		// Remove the directory we're exiting from to go up
+		*removed_directory_ptr = '\0';
 	}
 }
 
@@ -146,6 +166,7 @@ bool menu_display_update_required;
 // For SCREEN_MENU
 char (*menu_file_list)[14];
 char menu_current_dir[256]; // Must not use bulkmem because this path's used for loading the ROM
+char menu_prev_dir[14]; // Used for selecting the directory in the parent directory when we do up-dir
 bool menu_cache_invalidated; // Must invalidate upon bulkmem's filled by game ROM, upon path change, or upon change of directory's content
 int menu_offset;
 uint8_t file_io_result;
@@ -261,6 +282,7 @@ static void screen_error_handler(void) {
 			// This way next time we land on SCREEN_MENU, via or not via SCREEN_GLOBAL_CONFIG,
 			// we'd always retry loading the root directory
 			menu_current_dir[0] = '\0';
+			menu_prev_dir[0] = '\0';
 			menu_offset = 0;
 			menu_cache_invalidated = true;
 			return;
@@ -355,7 +377,7 @@ static void screen_menu_handler(void) {
 					// The path's too long
 					// We must reserve enough space for storing the filename next time we select a file.
 					// Since the path's too long, we need to get out of here and show error to the end-user
-					directory_up(menu_current_dir);
+					directory_up(menu_current_dir, NULL);
 					file_io_result = FR_PATH_LENGTH_ERROR;
 					// Here, now that I just need to wait for the (file_io_result != FR_OK) handling way below
 				} else {
@@ -393,7 +415,8 @@ static void screen_menu_handler(void) {
 			}
 		} else if(button_press & (1<<0x10)) { // The X button
 			// Up a directory
-			directory_up(menu_current_dir);
+			menu_prev_dir[0] = '\0';
+			directory_up(menu_current_dir, menu_prev_dir);
 			menu_offset = 0;
 			menu_cache_invalidated = true;
 		} else {
@@ -422,21 +445,58 @@ static void screen_menu_handler(void) {
 		lcd_transfer_begin(chip8.periph.display);
 
 		for(size_t i=0; i<2; i++) {
+			if(menu_prev_dir[0] != '\0') {
+				// Find the menu_offset of the specified directory
+				menu_offset = 0;
+				while(true) {
+					menu_file_count_of_current_page = MENU_PAGE_SIZE;
+					file_io_result = file_readdir(menu_current_dir, menu_cache_invalidated, menu_offset, menu_file_list, &menu_file_count_of_current_page);
+					if(file_io_result != FR_OK) {
+						break; // Skip to error handling mechanism
+					}
+					menu_cache_invalidated = false;
+					if(menu_file_count_of_current_page == 0) {
+						// Somehow the specified directory hasn't been found after reaching the last page
+						// Using menu_offset = 0
+						menu_offset = 0;
+						break;
+					} else {
+						bool found = false;
+						for(size_t i=0; i<MENU_PAGE_SIZE; i++) {
+							if(!strcmp(menu_file_list[i], menu_prev_dir)) {
+								found = true;
+								menu_offset += i;
+								break;
+							}
+						}
+						if(found) {
+							break;
+						}
+						menu_offset += MENU_PAGE_SIZE;
+					}
+				}
+				if(file_io_result != FR_OK) {
+					break; // Skip to error handling mechanism
+				}
+				menu_prev_dir[0] = '\0';
+			}
+
 			menu_file_count_of_current_page = MENU_PAGE_SIZE;
 			file_io_result = file_readdir(menu_current_dir, menu_cache_invalidated, menu_offset/MENU_PAGE_SIZE*MENU_PAGE_SIZE, menu_file_list, &menu_file_count_of_current_page);
-			if(file_io_result == FR_OK) {
-				menu_cache_invalidated = false;
-				if(menu_offset > 0 && menu_file_count_of_current_page == 0) {
-					// The new page's empty. It happens when we reached the end of the directory
-					// Let's select the last entry of the previous page
-					menu_offset = (menu_offset/MENU_PAGE_SIZE-1)*MENU_PAGE_SIZE +MENU_PAGE_SIZE-1;
-					continue;
-				}
-				menu_display_update_required = true;
-				break;
-			} else {
+			if(file_io_result != FR_OK) {
 				break; // Skip to error handling mechanism
 			}
+
+			menu_cache_invalidated = false;
+			if(menu_offset > 0 && menu_file_count_of_current_page == 0) {
+				// The new page's empty. It happens when we reached the end of the directory
+				// Let's select the last entry of the previous page
+				menu_offset = (menu_offset/MENU_PAGE_SIZE-1)*MENU_PAGE_SIZE +MENU_PAGE_SIZE-1;
+				continue; // After adjusting the menu_offset, reload the menu_file_list via file_readdir()
+			}
+			menu_display_update_required = true;
+
+			break; // All done!
 		}
 		// Get rid of all button press events after potentially long operation
 		adc_button_get_just_pressed();
@@ -1215,6 +1275,7 @@ int main() {
 	// For SCREEN_MENU
 	menu_file_list = bulkmem->menu_file_list;
 	menu_current_dir[0] = '\0';
+	menu_prev_dir[0] = '\0';
 	menu_offset = 0;
 	menu_file_count_of_current_page = 0;
 	menu_cache_invalidated = true;
