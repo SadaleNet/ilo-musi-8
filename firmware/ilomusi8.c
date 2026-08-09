@@ -1049,7 +1049,12 @@ static void screen_gameplay_handler(void) {
 			game_paused_start_tick = systick_now;
 			game_paused = true;
 		}
-		if(button_just_released & (1<<0x10)) {
+		// The game_paused condition here's required for an edge case of BOOTROM
+		// Without it, if button X were held upon boot, upon its release, it would
+		// glitch the graphic because game_paused_screen_buffer_backup isn't initialized nor we were in pause made.
+		// The X button release wouldn't trigger a game exit either because
+		// the game exit would only happen upon X button press
+		if(game_paused && (button_just_released & (1<<0x10))) {
 			for(size_t i=0; i<GAMEPLAY_EXIT_BANNER_ROW_HEIGHT; i++) {
 				draw_clear_row(chip8.periph.display, GAMEPLAY_EXIT_BANNER_ROW_POS+i);
 				draw_bitmap_h8(chip8.periph.display, game_paused_screen_buffer_backup[i], DISPLAY_WIDTH, 0, (GAMEPLAY_EXIT_BANNER_ROW_POS+i)*8);
