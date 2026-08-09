@@ -48,6 +48,7 @@
 #include <assert.h>
 
 #define FIRMWARE_VERSION "v0.1"
+#define HW_TEST_MODE_BUTTONS ((1<<0xD)|(1<<0xE)) // Hold button D and E to enter SCREEN_HW_TEST
 #define GAMEPLAY_INSTRUCTION_DURATION_MS (5000U) // Show gameplay instruction for this long
 #define GAMEPLAY_EXIT_DURATION_MS (3000U) // Tell the user to hold <X> for this long to exit the game
 #define GAMEPLAY_EXIT_BANNER_ROW_POS (3) // The row position of the EXIT banner for warning the user about the exit
@@ -63,6 +64,7 @@ enum screen_state {
 	SCREEN_GAMEOVER,
 	SCREEN_GAME_CRASHED,
 	SCREEN_FW_UPDATE_OK,
+	SCREEN_HW_TEST,
 };
 
 enum game_config_selection {
@@ -195,6 +197,16 @@ uint8_t game_paused;
 bool game_is_bootrom;
 uint32_t game_paused_start_tick; // After pausing for long enough (i.e. holding X for long enough), the game would be quit.
 uint8_t (*game_paused_screen_buffer_backup)[DISPLAY_WIDTH]; // The pause message overlays on the game's display. Need to restore upon unpause.
+
+// For SCREEN_HW_TEST
+uint32_t hw_test_audio_cycle_start_tick;
+uint32_t hw_test_last_refresh_tick;
+uint32_t hw_test_last_voltage_update_tick;
+bool hw_test_backlight_toggled;
+bool hw_test_button_test_mode;
+uint8_t hw_test_button_test_counter[17];
+uint32_t hw_test_voltage_reading;
+
 
 static void wait_button_release(void) {
 	// Clean screen reasons:
@@ -1238,6 +1250,100 @@ static void screen_fw_update_ok_handler(void) {
 	}
 }
 
+static void screen_hw_test_handler(void) {
+	if(!hw_test_button_test_mode) {
+		uint32_t button_just_pressed = chip8_keymap(adc_button_get_just_pressed());
+		// Button A: play buzzer audio clip
+		if(button_just_pressed & (1<<0xA)) {
+			hw_test_audio_cycle_start_tick = systick_now;
+		}
+		// Button B: Toggle LCD backlight
+		if(button_just_pressed & (1<<0xB)) {
+			hw_test_backlight_toggled = !hw_test_backlight_toggled;
+		}
+		// Button C: Toggle LCD pixels
+		if(button_just_pressed & (1<<0xC)) {
+			memset(chip8.periph.display, chip8.periph.display[0] ? 0x00 : 0xFF, sizeof(chip8.periph.display));
+		}
+
+		// Audio test playback handling. Must be done before button X handling so that stop buzzer mechanism would work
+		if(systick_now-hw_test_audio_cycle_start_tick < FUNCONF_SYSTEM_CORE_CLOCK/4) {
+			buzzer_set_pitch(67);
+			buzzer_set_volume(15);
+		} else if(systick_now-hw_test_audio_cycle_start_tick < FUNCONF_SYSTEM_CORE_CLOCK*2/4) {
+			buzzer_set_pitch(83);
+			buzzer_set_volume(15);
+		} else if(systick_now-hw_test_audio_cycle_start_tick < FUNCONF_SYSTEM_CORE_CLOCK*3/4) {
+			buzzer_set_pitch(95);
+			buzzer_set_volume(15);
+		} else if(systick_now-hw_test_audio_cycle_start_tick < FUNCONF_SYSTEM_CORE_CLOCK*4/4) {
+			buzzer_set_pitch(115);
+			buzzer_set_volume(15);
+		} else {
+			// Set the hw_test_audio_cycle_start_tick to the future so that it'd never be played
+			hw_test_audio_cycle_start_tick = systick_now + UINT32_MAX/2;
+			buzzer_set_volume(0);
+		}
+
+		// Button X: Switch to hw_test_button_test_mode
+		if(button_just_pressed & (1<<0x10)) {
+			hw_test_button_test_mode = true;
+			button_just_pressed = 0; // For the first frame of hw_test_button_test_mode, do not handle key presses
+			hw_test_last_voltage_update_tick = systick_now - FUNCONF_SYSTEM_CORE_CLOCK;
+			buzzer_set_volume(0); // Must stop buzzer so that it won't beep continuously
+			wait_button_release(); // Wait until all keys get released before jumping the the next state
+		}
+	} else {
+		// Count the number of button press events for each button
+		// If it reaches 10, wraps to 0
+		// If button X's count reaches 10, reset all counts to 0
+		uint32_t button_just_pressed_no_remap = adc_button_get_just_pressed();
+		for(size_t i=0; i<sizeof(hw_test_button_test_counter)/sizeof(*hw_test_button_test_counter); i++) {
+			if(button_just_pressed_no_remap & (1<<i)) {
+				if(++hw_test_button_test_counter[i] > 9) {
+					hw_test_button_test_counter[i] = 0;
+					if(i == 0x10) { // The X button reached limit. Resetting all counters to zero
+						memset(hw_test_button_test_counter, 0, sizeof(hw_test_button_test_counter));
+						break;
+					}
+				}
+			}
+		}
+
+		// Read the MCU voltage once a second
+		if(systick_now-hw_test_last_voltage_update_tick > FUNCONF_SYSTEM_CORE_CLOCK) {
+			hw_test_voltage_reading = adc_get_supply_voltage();
+			hw_test_last_voltage_update_tick = systick_now;
+		}
+	}
+
+	if(systick_now - hw_test_last_refresh_tick >= FUNCONF_SYSTEM_CORE_CLOCK/60) {
+		if(!hw_test_button_test_mode) {
+			lcd_set_brightness(hw_test_backlight_toggled ? 15 : 0);
+		} else {
+			draw_clear(chip8.periph.display);
+			char str[16] = {0};
+
+			// Draw button state
+			for(size_t i=0; i<16; i++) {
+				str[0] = hw_test_button_test_counter[i] + '0';
+				draw_text(chip8.periph.display, str, 12*(2+i%4), 12*(1+i/4));
+			}
+			str[0] = hw_test_button_test_counter[16] + '0';
+			draw_text(chip8.periph.display, str, 32, 0);
+
+			// Draw current voltage
+			sprintf(str, "%lu", hw_test_voltage_reading);
+			draw_text(chip8.periph.display, str, 64, 0);
+
+			// Always use the highest LCD brightness
+			lcd_set_brightness(15);
+		}
+		lcd_transfer_begin(chip8.periph.display);
+		hw_test_last_refresh_tick = systick_now;
+	}
+}
+
 int main() {
 	// Kickoff the watchdog as early as possible
 	watchdog_init();
@@ -1297,31 +1403,44 @@ int main() {
 	last_lcd_blit_tick = SysTick->CNT;
 	game_is_bootrom = false;
 
-	// Verify firmware update content
-	file_io_result = file_verify_firmware_update();
+	if((chip8_keymap(adc_button_get_state()) & HW_TEST_MODE_BUTTONS) == HW_TEST_MODE_BUTTONS) {
+		// For SCREEN_HW_TEST: Firmware test button combination detected. Entering firmware test mode!
+		buzzer_set_buffer(CHIP8_DEFAULT_AUDIO_SAMPLE);
+		hw_test_audio_cycle_start_tick = SysTick->CNT + UINT32_MAX/2;
+		hw_test_backlight_toggled = true;
+		hw_test_button_test_mode = false;
+		memset(chip8.periph.display, 0xFF, sizeof(chip8.periph.display)); // Set all LCD pixels to black
+		memset(hw_test_button_test_counter, 0, sizeof(hw_test_button_test_counter));
+		hw_test_voltage_reading = 0;
+		hw_test_last_refresh_tick = systick_now;
+		screen_state = SCREEN_HW_TEST;
+	} else {
+		// Verify firmware update content
+		file_io_result = file_verify_firmware_update();
 
-	switch(file_io_result) {
-		case FR_OK:
-			screen_state = SCREEN_FW_UPDATE_OK;
-		break;
-		case FR_FIRMWARE_VERIFICATION_ERROR:
-			screen_state = SCREEN_ERROR;
-		break;
-		case FR_NO_FILE: // Firmware update file not found, which's a perfectly normal case. Gotta suppress this error
-			file_io_result = FR_OK;
-		default: // Fallthrough. (default is "other error occurred")
-			// For the case of "other error had occurred", there's no need to jump to SCREEN_ERROR for now
-			// After the bootrom exits, the error would be shown
-			// There's a slight chance that the file_io_result would be overwritten but that's ok
-			// because we're already having io error. Chances are that it'd just be replaced by another error
-			if(bootrom_load(chip8_cfg, &chip8)) {
-				prepare_game_launch();
-				game_is_bootrom = true;
-				screen_state = SCREEN_GAMEPLAY;
-			} else {
-				screen_state = SCREEN_MENU;
-			}
-		break;
+		switch(file_io_result) {
+			case FR_OK:
+				screen_state = SCREEN_FW_UPDATE_OK;
+			break;
+			case FR_FIRMWARE_VERIFICATION_ERROR:
+				screen_state = SCREEN_ERROR;
+			break;
+			case FR_NO_FILE: // Firmware update file not found, which's a perfectly normal case. Gotta suppress this error
+				file_io_result = FR_OK;
+			default: // Fallthrough. (default is "other error occurred")
+				// For the case of "other error had occurred", there's no need to jump to SCREEN_ERROR for now
+				// After the bootrom exits, the error would be shown
+				// There's a slight chance that the file_io_result would be overwritten but that's ok
+				// because we're already having io error. Chances are that it'd just be replaced by another error
+				if(bootrom_load(chip8_cfg, &chip8)) {
+					prepare_game_launch();
+					game_is_bootrom = true;
+					screen_state = SCREEN_GAMEPLAY;
+				} else {
+					screen_state = SCREEN_MENU;
+				}
+			break;
+		}
 	}
 
 	while(true) {
@@ -1339,6 +1458,7 @@ int main() {
 			case SCREEN_GAMEOVER: screen_gameover_handler(); break;
 			case SCREEN_GAME_CRASHED: screen_game_crashed_handler(); break;
 			case SCREEN_FW_UPDATE_OK: screen_fw_update_ok_handler(); break;
+			case SCREEN_HW_TEST: screen_hw_test_handler(); break;
 		}
 
 		if(screen_state != screen_state_prev) {
