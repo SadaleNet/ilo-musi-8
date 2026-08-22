@@ -25,6 +25,7 @@ kepeken ilo musi 8 (ilo musi ali) la sina ken musi e musi CHIP-8. ilo musi 8 la:
 ## sona seme li lon?
 
 ```
+assembly/        # lon ma ni la sina kama sona e nasin pali pi ilo musi 8
 bootloader/      # kepeken sona ni la sina ken pana e sona sin tawa ilo musi 8. ona li kama sona tan ILOMUSI8.BIN lon lipu sona
 cardboard_label/ # sitelen poki
 docs-assets/     # sitelen pi lipu README.MD
@@ -33,7 +34,6 @@ enclosure_label/ # sitelen lon nena en sitelen lon poki
 firmware/        # kepeken sona ni la ilo musi 8 li pali. sina ken musi kepeken ilo musi 8 tan ni: sona ni li lon
 kicad/           # lipu kiwen sona. ilo musi 8 li jo e lipu kiwen. jan li pana e sona tawa ona la ilo musi 8 li ken pali
 user_manual/     # jan li lukin e ona la jan ni li kama sona e ilo musi 8 li ken musi kepeken ona
-full_bom.csv     # lipu ni li pana e sona ni: jan li wile pali e ilo musi 8 la ona o esun e seme?
 ```
 
 ## o esun e ilo ni!
@@ -44,10 +44,7 @@ mi jo e mani namako la mi wile pana e ilo musi 8 tawa jan pi mani ala. :)
 
 ## o pali e ilo ni!
 
-* o lukin e lipu `full_bom.csv`. ni la sina ken esun e ijo ali pi ilo musi 8
-	* o sona e ni: ilo pali li lon ala lipu ni a! ilo pali li ni: ilo WCH-LinkE en ilo seli en ilo pi pali sitelen en ijo ante
-* o lukin e lipu "README.MD" insa poki ni:
-	* `kicad/` -> `bootloader/` -> `firmware/` -> `keycap_label/` ->  `enclosure/` -> `user_manual/` -> `cardboard_label/`
+o lukin e lipu ni: "[assembly/](./assembly/)"
 
 ## ken
 
@@ -84,6 +81,7 @@ ilo musi 8 is a production-ready handheld CHIP-8 game console. Feature list:
 ## Repo Structure
 
 ```
+assembly/        # Assembly instruction for you to build your own unit
 bootloader/      # Bootloader for flashing the file "ILOMUSI8.BIN" on TF card as firmware
 cardboard_label/ # Label slapped onto the packaging cardboard
 docs-assets/     # Images for README.MD
@@ -92,7 +90,6 @@ enclosure_label/ # Keycap labels and branding labels slapped onto the enclosure
 firmware/        # Firmware source code
 kicad/           # Electronics design
 user_manual/     # User manual source and PDF
-full_bom.csv     # Full BOM with pricing and component ordering information
 ```
 
 ## Ordering a unit
@@ -108,10 +105,7 @@ If you want a unit very badly, you can contact me and tell me your situation. I'
 
 ## Building your Own Unit
 
-* First, purchase all the material in the BOM `full_bom.csv`
-	* Warning: The BOM doesn't contain equipments like WCH-LinkE programmer, soldering iron, printer, etc.
-* Then, follow the the README files inside the folders in the following sequence:
-	* `kicad/` -> `bootloader/` -> `firmware/` -> `keycap_label/` ->  `enclosure/` -> `user_manual/` -> `cardboard_label/`
+Please follow the the instruction in the "[assembly/](./assembly/)" folder
 
 # License
 
