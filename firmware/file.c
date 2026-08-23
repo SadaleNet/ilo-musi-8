@@ -113,7 +113,7 @@ void file_first_mount(void) {
 
 void file_loop(void) {
 	// Handle card reinsertion. Must initialize the card before any LCD SPI communication
-	// In practice, if LCD SPI communicaition is on-going, it won't stop until the row's sent
+	// In practice, if LCD SPI communication is on-going, it won't stop until the row's sent
 	// and there's no implemented mechanism to stop the LCD SPI transfer
 	// so there might be a very little bit of delay of SPI initialization for the card
 	if(adc_card_is_just_removed()) {

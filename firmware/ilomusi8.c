@@ -54,6 +54,22 @@
 #define GAMEPLAY_EXIT_BANNER_ROW_POS (3) // The row position of the EXIT banner for warning the user about the exit
 #define GAMEPLAY_EXIT_BANNER_ROW_HEIGHT (2) // How tall the confirm game quit banner is. Each row is 8px.
 
+// State Transition Table for screen_state
+// FROM \ TO		ERROR			MENU			GAME_CONFIG		GLOBAL_CONFIG	PRE_GAMEPLAY	GAMEPLAY		GAMEOVER		GAME_CRASHED	FW_UPDATE_OK	HW_TEST
+// INIT				ilomusi8.binERR																	BOOTROM exists									ilomusi8.binOK	D&E_HELD
+// ERROR			*				X_pressed						D_pressed
+// MENU				CARD_ERR		*				C_pressed		D_pressed		F_pressedw/info	F_pressednoinfo
+// GAME_CONFIG		CARD_ERR		X_pressed		*
+// GLOBAL_CONFIG					X_pressed						*
+// PRE_GAMEPLAY						X_pressed										*				any_pressed/wait
+// GAMEPLAY			saveflag_ERR	X_held^1														*				exit_detected^2	crash_detected
+// GAMEOVER							X_pressed																		*
+// GAME_CRASHED						X_pressed																						*
+// FW_UPDATE_OK						X_pressed																										*
+// HW_TEST																																							*
+// ^1 For BOOTROM, X_pressed instead of X_held would trigger GAMEPLAY->MENU transition; X_held means that the user would need to hold X for a few seconds to quit
+// ^2 For BOOTROM, upon the game exits, it'd switch to MENU instead of GAMEOVER
+
 enum screen_state {
 	SCREEN_ERROR, // File IO Error Screen
 	SCREEN_MENU,
