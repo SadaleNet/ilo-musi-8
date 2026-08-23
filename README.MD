@@ -27,13 +27,12 @@ kepeken ilo musi 8 (ilo musi ali) la sina ken musi e musi CHIP-8. ilo musi 8 la:
 ```
 assembly/        # lon ma ni la sina kama sona e nasin pali pi ilo musi 8
 bootloader/      # kepeken sona ni la sina ken pana e sona sin tawa ilo musi 8. ona li kama sona tan ILOMUSI8.BIN lon lipu sona
-cardboard_label/ # sitelen poki
 docs-assets/     # sitelen pi lipu README.MD
 enclosure/       # sitelen pi lupa selo
-enclosure_label/ # sitelen lon nena en sitelen lon poki
 firmware/        # kepeken sona ni la ilo musi 8 li pali. sina ken musi kepeken ilo musi 8 tan ni: sona ni li lon
 kicad/           # lipu kiwen sona. ilo musi 8 li jo e lipu kiwen. jan li pana e sona tawa ona la ilo musi 8 li ken pali
-user_manual/     # jan li lukin e ona la jan ni li kama sona e ilo musi 8 li ken musi kepeken ona
+label/           # sitelen selo en sitelen poki
+manual/          # jan li lukin e ona la jan ni li kama sona e ilo musi 8 li ken musi kepeken ona
 ```
 
 ## o esun e ilo ni!
@@ -86,10 +85,10 @@ bootloader/      # Bootloader for flashing the file "ILOMUSI8.BIN" on TF card as
 cardboard_label/ # Label slapped onto the packaging cardboard
 docs-assets/     # Images for README.MD
 enclosure/       # CNC hole-drilling diagram of an off-the-shelf enclosure
-enclosure_label/ # Keycap labels and branding labels slapped onto the enclosure
 firmware/        # Firmware source code
 kicad/           # Electronics design
-user_manual/     # User manual source and PDF
+label/           # Keycap labels and branding labels slapped onto the enclosure and cardboard label
+manual/          # User manual source and PDF
 ```
 
 ## Ordering a unit
