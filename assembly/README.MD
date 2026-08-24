@@ -43,7 +43,18 @@ make
 
 # o lukin e pakala!
 
-TODO
+1. o pana e poki wawa "AAx2" tawa ilo musi 8. taso o pana ala e wawa tawa ona
+2. o pilin awen e nena "D" e nena "E". ni la o pana e wawa
+3. o pilin e nena "A". kalama musi li lon
+4. o pilin e nena "B". suno pi ilo sitelen li weka. o pilin sin e nena "B". suno li kama sin
+5. o pilin e nena "C". ilo sitelen li kama pimeja ala. o pilin sin e nena "C". ilo sitelen li kama pimeja ali
+6. o pilin e nena "X"
+7. o lukin e nanpa suli. nanpa ni li wawa "mV" pi ilo sona. nanpa "3250~3350" li pona
+8. nena ali li jo e nanpa. sina pilin e nena lon tenpo wan la nanpa li kama wan. lon tenpo tu la nanpa li kama tu. nena ali la o pilin lon tenpo luka tu tu (9). nanpa ali li kama luka tu tu (9).
+9. o weka e wawa. o pana e lipu sona "TF Card". musi o insa lipu sona ni.
+10. o pana e wawa kepeken linja wawa "USB"
+11. o lukin e ni: musi pi lipu sona li lon
+12. o anu e ijo musi. sina pana e ijo sin tawa musi ni la pakala o lon ala!
 
 # o poki e ali!
 
