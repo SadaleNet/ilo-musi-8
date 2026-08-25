@@ -19,7 +19,7 @@ kepeken ilo musi 8 (ilo musi ali) la sina ken musi e musi CHIP-8. ilo musi 8 la:
 * musi open li lon. sina pana e wawa tawa ilo musi 8 sina la sina ken lukin e sitelen pi wile sina
 * toki mute li lon: toki pona (sitelen Lasin en sitelen pona) en [sitelen Sate](https://sadale.net/tok/sitelen-sate) en toki ike Inli
 * sona ali ona li lon. jan ali li ken lukin e ona li ken ante e ona li ken pali e ona
-* jan li ken pali e ona mute kepeken mani lili kepeken tenpo lili
+* jan li ken pali e ona mute kepeken mani lili kepeken tenpo lili (sina pali e ona mute "20" la sina o pana e mani "$12x20" o kepeken tenpo "30minutesx20")
 * jan li ken ante e lukin ona (jan li ken ante e musi open. jan li ken ante e sitelen lon selo.)
 
 ## sona seme li lon?
@@ -74,7 +74,7 @@ ilo musi 8 is a production-ready handheld CHIP-8 game console. Feature list:
 * Bootrom support. Can be used for showing boot screen upon powering on of the device
 * Multi-language UI: English, [Toki Pona](https://en.wikipedia.org/wiki/Toki_Pona) and [Sadalian Script](https://sadale.net/en/sadalian)
 * Fully open source, including electronics, enclosure and firmware, with full BOM and assembly instruction.
-* Optimized for small scale production in terms of material cost and box build assembly time
+* Optimized for small scale production in terms of material cost and box build assembly time (At batch of 20, it costs $12 and 30 minutes of assembly time per unit)
 * Optimized for white-labeling (custom boot screen via the bootrom, custom branding sticker on enclosure, custom cardboard label, etc.)
 
 ## Repo Structure

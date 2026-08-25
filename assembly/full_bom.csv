@@ -1,1 +1,32 @@
-TODO: content to be filled in.
+tomo esun,ijo,mani seme?,mani kulupu,suli kulupu,nanpa wile,mani USD pi ilo nena wan,pakala,mani USD pi pakala ala,mani pi poki tawa,mani USD pi poki tawa,linja esun,sona namako
+Supplier,Item,Cost Unit,Cost of Batch,Batch Size,Quantity,USD per unit,Scrap Rate,USD per unit post-scrap,Shipping fee,USD shipping fee,URL,Remarks
+JLCPCB,PCBA,USD,105,20,1,5.25,0.10,5.833,9,9.00,https://jlcpcb.com/,Send them ilomusiali-production.zip. MOQ10@$7.2|MOQ20@$5.3|MOQ30@$4.5
+兴华鑫蜂鸣器喇叭咪头,Passive Piezo Buzzer with wire cylinder 13diax25mm,RMB,0.3,1,1,0.05,0.05,0.049,4,0.62,https://item.taobao.com/item.htm?id=742819220602&skuId=5122597596053,
+富邦胶带,Buzzer Tape 10x10mm,RMB,4.18,240,1,0.00,0.10,0.003,0,0.00,https://item.taobao.com/item.htm?id=774299147776&skuId=5296126364706,
+深圳市尚视界科技,SX12864-01-V01 LCD,RMB,27.16,10,1,0.42,0.05,0.440,0,0.00,https://item.taobao.com/item.htm?id=805726257321&skuId=5487106825036,
+亿达胶粘制品,LCD Tape 20x20x1mm,RMB,0.45,10,1,0.01,0.10,0.008,5,0.77,https://item.taobao.com/item.htm?id=893302548160,
+佳睦电子仪表壳体,Custom CNC Enclosure ABS 135x70x40mm,RMB,280,20,1,2.15,0.05,2.267,9,1.38,https://item.taobao.com/item.htm?id=604193389470&skuId=4405201651754,Send them ilomusiali_techdraw.dxf and ilomusiali_techdraw.pdf
+康宏电子品牌官方店,Red Circular Keycap 7.5diax4.5mm pad 9.7dia,RMB,10.6,100,17,0.28,0.05,0.292,6,0.92,https://item.taobao.com/item.htm?id=753602071983&skuId=5626629278968,
+固万基五金科技,M2.6x6 Pan-head 6mmdia Self-Tapping Philips Screw,RMB,3.5,200,4,0.01,0.10,0.012,0,0.00,https://item.taobao.com/item.htm?id=38979225704&skuId=4925331665948,
+固万基五金科技,M2.5x10 Self-Tapping Philips Screw,RMB,6.93,200,4,0.02,0.10,0.024,0,0.00,https://item.taobao.com/item.htm?id=39009976141&skuId=5948766897484,
+深圳市科泽恩电子,2p black-red wire with ZH connector 50mm,RMB,4.73,50,1,0.01,0.10,0.016,3,0.46,https://item.taobao.com/item.htm?id=618175270348&skuId=4534398499147,
+博鑫弹簧企业店,Battery spring pair semicircle 12x12mm,RMB,13.6,100,1,0.02,0.10,0.023,0,0.00,https://item.taobao.com/item.htm?id=659515501902&skuId=5013090193424,
+博鑫弹簧企业店,Battery spring negative-positive connected 26.5x12mm,RMB,13.6,100,1,0.02,0.10,0.023,0,0.00,https://item.taobao.com/item.htm?id=659515501902&skuId=5013090193415,
+米乐奇兴伟峰兴专卖店,Battery Tray Padding Tape 10x3mm,RMB,8.8,10,0.1,0.01,0.20,0.017,0,0.00,https://detail.tmall.com/item.htm?id=760991627406&skuId=6046450314907,
+小福水晶标厂,Custom Keycap Label (UV DTF sticker),RMB,38,50,1,0.12,0.20,0.146,0,0.00,https://item.taobao.com/item.htm?id=694929996955&skuId=5221531111683,Send them ima_keylabel_46.1x54.4mm.png
+星辰办公耗材店,Custom Branding Label (standard sticker),RMB,60,100,1,0.09,0.10,0.103,0,0.00,https://item.taobao.com/item.htm?id=680044670891&skuId=5045726682039,Send them ima_brandlabel_50x25mm.png
+(TBC),Custom Cardboard Label,RMB,25,50,1,0.08,0.10,0.085,0,0.00,TBC,Exact cost of outsourcing TBC. I'm printing it with the printer in my home for now
+海鑫优卡 专供批发,TF Card,RMB,3.3,1,1,0.51,0.10,0.564,6.8,1.05,https://item.taobao.com/item.htm?id=620706685601,
+春诚百货,TF Card to USB adapter,RMB,0.77,1,1,0.12,0.10,0.132,3,0.46,https://item.taobao.com/item.htm?id=704514415375&skuId=4980420817457,
+专正电子厂,USB Micro-B Cable 100 wire strands 1meter,RMB,0.58,1,1,0.09,0.15,0.105,4,0.62,https://item.taobao.com/item.htm?id=575077271834&skuId=4873575713302,
+(TBC),User manual,RMB,25,50,1,0.08,0.10,0.085,0,0.00,TBC,Exact cost of outsourcing TBC. I'm printing it with the printer in my home for now
+chuanyue旗舰店,Cardboard 150x100x40mm White,RMB,11.96,50,1,0.04,0.15,0.043,0,0.00,https://detail.tmall.com/item.htm?id=815987432269&skuId=5519165189919,
+-,Recycled Bubble Wrap,RMB,0,1,1,0.00,0.00,0.000,0,0.00,-,
+-,Office tape for holding the bubble wrap,HKD,0.2,1,1,0.03,0.00,0.026,1,0.13,-,
+图业包装,Shipping bag 20x30cm,RMB,6.5,100,1,0.01,0.10,0.011,0,0.00,https://item.taobao.com/item.htm?id=614164738722&skuId=4492936382058,
+taobao official forwarding warehouse service,Shipping fee from mainland China warehouse to HKSAR,RMB,0,1,0.11,0.00,0.00,0.000,30,4.62,-,
+安立信旗舰店,Lead-free soldering coil,RMB,24.8,1,0.01,0.04,0.00,0.038,0,0.00,https://detail.tmall.com/item.htm?id=588626885887&skuId=5970012670897,
+-,Electricity for soldering (says 0.1kWh),HKD,0.1,1,1,0.01,0.00,0.013,0,0.00,-,
+-,mani ali (Total Cost),USD,-,-,-,-,-,10.36,-,20.02,-,
+,,,,,,,,^ mani pi ilo nena wan ^,,^ mani pi poki tawa ^,,
+,,,,,,,,^ Total cost per unit ^,,^ Shipping fee per batch ^,,
