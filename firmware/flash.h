@@ -35,10 +35,10 @@
 #define FLASH_SECTOR_SIZE (1024) // The reference manual said that it's "1K page". I invented the name "sector" for that.
 
 #define FLASH_USER_START (0x800E000) // Inclusive
-#define FLASH_USER_END (0x800F800) // Inclusive
+#define FLASH_USER_END (0x800F800) // Exclusive
 	// Sub-items of USER area above
 	#define FLASH_CONFIG_START (0x800E000) // Inclusive
-	#define FLASH_CONFIG_END (0x0800E800) // Exclusive
+	#define FLASH_CONFIG_END (0x800E800) // Exclusive
 	#define FLASH_BOOTROM_START (0x800E800) // Inclusive
 	#define FLASH_BOOTROM_END (0x800F800) // Exclusive
 		// Sub-items of BOOTROM above

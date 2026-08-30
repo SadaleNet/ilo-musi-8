@@ -24,7 +24,7 @@
 // ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-// The content in this struct is meant to be used for storing temporary values
+// The content in this struct is meant to be used for storing temporary values.
 // Due to the limited amount of RAM and that the CHIP8 emulator's taking too much RAM,
 // I'd like to utilize the RAM while the CHIP8 emulator is inactive.
 // The purpose of the pointer bulkmem serves the same purpose as union for letting

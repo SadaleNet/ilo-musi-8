@@ -24,6 +24,23 @@ Download [ch32fun](https://github.com/cnlohr/ch32fun/tree/master) separately.
 Run `CH32FUN_PATH=/path/to/ch32fun make` to build.
 It'd also perform flashing if you attached your ilo nena 8 via WCH-LinkE.
 
+## Code FLASH Memory Layout
+
+The 62kB Code FLASH area of the CH32V006 is partitioned into the following layout:
+
+* 0x8000000 ~ 0x800DFFF (56kB): App
+* 0x800E000 ~ 0x800E7FF (2kB): Global Config (e.g. buzzer volume, backlight, etc.)
+* 0x800E800 ~ 0x800F7FF (4kB): BOOTROM, including its config
+
+Since I'm using the linker script from the ch32fun upstream, I'm not overriding it.
+Instead, the layout is implicitly enforced by ensuring that the app's flash size is below 56kB in the Makefile.
+
+## Bulkmem Memory Sharing Mechanism
+
+Since I'm running low on RAM and I'd like to ensure that `chip8.c` and `chip8.h` can be self-contained,
+I'm doing something clever (and not-so-obvious) to use the CHIP-8 emulator's main memory area for something else while the emulator isn't running.
+Please refer to `bulkmem.h` on how it works.
+
 ## DMA Allocation
 
 The following DMA channels are used:
@@ -75,3 +92,43 @@ The `chip8.c` and `chip8.h` are an implementation of CHIP-8 emulator. These two 
 This way one could easily reuse the emulator in any other C codebases.
 
 This is also the reason why the draw function `DXYN` does not share the draw functions in `draw.c`
+
+## Crash Screen Documentation
+
+In case the game's crashed, a crash screen would be shown. Here's the meaning of the crash screen:
+
+![Crash Screen Documentation](../docs-assets/crashed.jpg)
+
+## Game Config INI Format Specification
+
+Each game can have an INI file for specifying its configuration. The following fields can be specified:
+
+| Field | Alias (in Toki Pona) | Datatype | Range | Description | Default Value |
+| --- | --- | --- | --- |  --- | --- |
+| quirks | nasin | HEXNUM | HEX x8 | For compatibility of ROM written for different CHIP-8 implementations. See `CHIP8_QUIRK_*` in chip8.h | 00000888 |
+| speed | tenpo | DECNUM | 0~99 | Game speed. 0 is unlimited, 1~99 to set the speed limit (instruction/frame). Each frame is 60Hz. | 00 |
+| audio | kalama | HEXBUF | HEX x32 | The audio buffer upon game launch. 1-bit. Sampling rate depends on the pitch. | F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0 |
+| pitch | wawa-kalama | DEC | 0~256 | The audio sampling rate upon game launch. Value is `4000*2^((X-64)/48)` Hz. | 64 |
+| font | sitelen | HEXBUF | HEX x160 | The 4x5 font used in the game. | F0909090F02060202070F010F080F0F010F010F09090F01010F080F010F0F080F090F0F010204040F090F090F0F090F010F0F090F09090E090E090E0F0808080F0E0909090E0F080F080F0F080F08080 |
+| font-large | sitelen-suli | HEXBUF | HEX x320 | The 8x10 font used in the game. | FFFFC3C3C3C3C3C3FFFF1878781818181818FFFFFFFF0303FFFFC0C0FFFFFFFF0303FFFF0303FFFFC3C3C3C3FFFF03030303FFFFC0C0FFFF0303FFFFFFFFC0C0FFFFC3C3FFFFFFFF0303060C18181818FFFFC3C3FFFFC3C3FFFFFFFFC3C3FFFF0303FFFF7EFFC3C3C3FFFFC3C3C3FCFCC3C3FCFCC3C3FCFC3CFFC3C0C0C0C0C3FF3CFCFEC3C3C3C3C3C3FEFCFFFFC0C0FFFFC0C0FFFFFFFFC0C0FFFFC0C0C0C0 |
+| layout | ma-nena | DECNUM | 0~2 | Keypad layout. Shown before the game's launched. See `enum chip8_input_layout` in chip8.h | 0 |
+| navigation | nena-tawa | HEXFLAG | HEX x(0~16) | The in-game buttons used for navigation. Shown before the game's launched. | (empty) |
+| action | nena-pali | HEXFLAG | HEX x(0~16) | The in-game buttons used for action. Shown before the game's launched. | (empty) |
+| replay | nena-sin | HEXFLAG | HEX x(0~16) | The in-game buttons used for replay or for starting the game. Shown before the game's launched. | (empty) |
+
+Only the quirks and speed can be modified via the game config screen in the console. All other values must be modified by direct modification of the INI file.
+
+Full Example:
+
+```
+quirks = 00002413
+speed = 30
+audio = FFFFFF00FFFFFF00FFFFFF00FFFFFF00
+pitch = 16
+font = 60A0A0A0C040C04040E0C0204080E0C0204020C020A0E02020E080C020C04080C0A040E02060404040A040A04040A060204040A0E0A0A0C0A0C0A0C06080808060C0A0A0A0C0E080C080E0E080C08080
+font-large = 7CC6CEDED6F6E6C67C001030F03030303030FC0078CCCC0C183060CCFC0078CC0C0C380C0CCC78000C1C3C6CCCFE0C0C1E00FCC0C0C0F80C0CCC78003860C0C0F8CCCCCC7800FEC6C6060C183030300078CCCCEC78DCCCCC78007CC6C6C67C18183070003078CCCCCCFCCCCCCC00FC6666667C666666FC003C66C6C0C0C0C6663C00F86C66666666666CF800FE6260647C646062FE00FE6662647C646060F000
+layout = 1
+navigation = 5789
+action = 6
+replay = F
+```
