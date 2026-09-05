@@ -58,7 +58,7 @@ make
 
 # o poki e ali!
 
-TODO
+![nasin poki pi ijo ali](../docs-assets/packing.jpg)
 
 ====
 
