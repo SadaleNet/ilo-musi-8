@@ -47,7 +47,7 @@
 #include <string.h>
 #include <assert.h>
 
-#define FIRMWARE_VERSION "v0.1"
+#define FIRMWARE_VERSION "v1.0"
 #define HW_TEST_MODE_BUTTONS ((1<<0xD)|(1<<0xE)) // Hold button D and E to enter SCREEN_HW_TEST
 #define GAMEPLAY_INSTRUCTION_DURATION_MS (5000U) // Show gameplay instruction for this long
 #define GAMEPLAY_EXIT_DURATION_MS (3000U) // Tell the user to hold <X> for this long to exit the game
