@@ -1,5 +1,10 @@
 **(English: Scroll down for English | toki ike Inli li lon anpa pi toki pona)**
 
+![sitelen pi ilo musi 8](./docs-assets/readme.jpg)
+
+* lipu: https://ilomusi8.sadale.net/
+* sitelen tawa lon ilo Jutu "Youtube": (TODO: tenpo ni la ona li lon ala. o awen a!)
+
 # ilo musi 8 - ilo musi pi nasin CHIP-8
 
 kepeken ilo musi 8 (ilo musi ali) la sina ken musi e musi CHIP-8. ilo musi 8 la:
