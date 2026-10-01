@@ -138,4 +138,6 @@ make
 
 That's it! You've successfully built a unit of ilo musi 8. Build more if required! :D
 
-This product is optimized for manufacturing with batch size of 10~50 and can be built at home. For quantity above 100~200, I'd recommend modifying the design for further cost optimization (e.g. build PCBA test jig, order a custom mold for the enclosure, etc.)
+This product is optimized for manufacturing with batch size of 10~50 and can be built at home.
+
+For quantity above 100~200, I'd recommend modifying the design for further cost optimization (e.g. build PCBA test jig, order a custom mold for the enclosure, etc.)

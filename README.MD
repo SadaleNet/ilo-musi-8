@@ -19,7 +19,7 @@ kepeken ilo musi 8 (ilo musi ali) la sina ken musi e musi CHIP-8. ilo musi 8 la:
 * wawa: poki wawa AAx2 anu linja wawa "USB MicroB"
 * sona musi: kepeken lipu sona "TF Card"
 	* nasin FAT16 en nasin FAT32 taso (o kepeken ala nasin exFAT!)
-	* [nasin nimi 8.3]([8.3 filename](https://en.wikipedia.org/wiki/8.3_filename)) taso
+	* [nasin nimi "8.3 filename"](https://en.wikipedia.org/wiki/8.3_filename) taso
 	* sina kin li ken pana e sona sin tawa ilo musi 8 kepeken lipu sona "TF Card"
 * musi open li lon. sina pana e wawa tawa ilo musi 8 sina la sina ken lukin e sitelen pi wile sina
 * toki mute li lon: toki pona (sitelen Lasin en sitelen pona) en [sitelen Sate](https://sadale.net/tok/sitelen-sate) en toki ike Inli
